@@ -2,6 +2,7 @@
 #include <SDL2/SDL_syswm.h>
 
 #include <GL/glx.h>
+#include <dlfcn.h>
 
 #include <stdio.h>
 #include <cstring>
@@ -39,5 +40,31 @@ extern "C" {
     void* SDL_GL_GetProcAddress(const char* name) {
 		// TODO: Fix this HACK
 		return (void*)glXGetProcAddress((const GLubyte*)name);
+    }
+
+    void *SDL_LoadObject(const char *sofile)
+    {
+        void *handle;
+        const char *loaderror;
+
+        handle = dlopen(sofile, RTLD_NOW|RTLD_LOCAL);
+        loaderror = (char *) dlerror();
+        if (handle == NULL) {
+            SDL_SetError("Failed loading %s: %s", sofile, loaderror);
+        }
+        return (handle);
+    }
+
+    void *SDL_LoadFunction(void *handle, const char *name)
+    {
+        void *symbol = dlsym(handle, name);
+        return (symbol);
+    }
+
+    void SDL_UnloadObject(void *handle)
+    {
+        if (handle != NULL) {
+            dlclose(handle);
+        }
     }
 }

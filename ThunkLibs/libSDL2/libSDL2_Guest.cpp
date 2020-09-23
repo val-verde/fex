@@ -12,11 +12,21 @@
 
 #include "common/Guest.h"
 
+#include "callback_typedefs.inl"
+
 #include "thunks.inl"
 #include "function_packs.inl"
 #include "function_packs_public.inl"
 
-LOAD_LIB(libSDL2)
+#include "callback_unpacks.inl"
+
+struct {
+    #include "callback_unpacks_header.inl"
+} callback_unpacks = {
+    #include "callback_unpacks_header_init.inl"
+};
+
+LOAD_LIB_WITH_CALLBACKS (libSDL2)
 
 #include <vector>
 
@@ -62,5 +72,10 @@ extern "C" {
         if (lib) {
             dlclose(lib);
         }
+    }
+
+    // These use callbacks
+    SDL_AudioDeviceID SDL_OpenAudioDevice(const char* a0, int a1, const SDL_AudioSpec* a2, SDL_AudioSpec* a3, int a4) {
+        return SDL_OpenAudioDevice_internal(a0, a1, a2, a3, a4);
     }
 }

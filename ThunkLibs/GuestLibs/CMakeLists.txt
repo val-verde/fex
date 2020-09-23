@@ -43,12 +43,12 @@ generate(libGL thunks function_packs function_packs_public tab_function_packs)
 add_guest_lib(GL)
 
 # disabled for now, headers are platform specific
-# find_package(SDL2 REQUIRED)
-# generate(libSDL2 thunks function_packs function_packs_public)
-# add_guest_lib(SDL2)
-# target_include_directories(SDL2-guest PRIVATE ${SDL2_INCLUDE_DIRS})
-# target_link_libraries(SDL2-guest PRIVATE GL)
-# target_link_libraries(SDL2-guest PRIVATE dl)
+find_package(SDL2 REQUIRED)
+generate(libSDL2 thunks function_packs function_packs_public  callback_structs callback_unpacks_header callback_unpacks_header_init callback_unpacks callback_typedefs)
+add_guest_lib(SDL2)
+target_include_directories(SDL2-guest PRIVATE ${SDL2_INCLUDE_DIRS})
+target_link_libraries(SDL2-guest PRIVATE GL)
+target_link_libraries(SDL2-guest PRIVATE dl)
 
 generate(libX11 thunks function_packs function_packs_public callback_structs callback_unpacks_header callback_unpacks_header_init callback_unpacks callback_typedefs)
 add_guest_lib(X11)

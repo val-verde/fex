@@ -37,10 +37,10 @@ add_host_lib(GL)
 target_link_libraries(GL-host PRIVATE GL)
 
 # disabled for now, headers are platform specific
-# find_package(SDL2 REQUIRED)
-# generate(libSDL2 function_unpacks tab_function_unpacks ldr ldr_ptrs)
-# add_host_lib(SDL2)
-# target_include_directories(SDL2-host PRIVATE ${SDL2_INCLUDE_DIRS})
+find_package(SDL2 REQUIRED)
+generate(libSDL2 function_unpacks tab_function_unpacks ldr ldr_ptrs callback_packs callback_structs callback_unpacks_header callback_typedefs)
+add_host_lib(SDL2)
+target_include_directories(SDL2-host PRIVATE ${SDL2_INCLUDE_DIRS})
 
 generate(libX11 function_unpacks tab_function_unpacks ldr ldr_ptrs callback_packs callback_structs callback_unpacks_header callback_typedefs)
 add_host_lib(X11)

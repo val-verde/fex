@@ -337,7 +337,10 @@ fn("int SDL_wcscmp(const wchar_t*, const wchar_t*)")
 fn("long int SDL_strtol(const char*, char**, int)")
 fn("long unsigned int SDL_strtoul(const char*, char**, int)")
 fn("SDL_AssertState SDL_ReportAssertion(SDL_AssertData*, const char*, const char*, int)")
-fn("SDL_AudioDeviceID SDL_OpenAudioDevice(const char*, int, const SDL_AudioSpec*, SDL_AudioSpec*, int)")
+# special handling because of callback
+cb("void* SDL_AudioCallbackCB(void *, Uint8 *, int)");
+fn("SDL_AudioDeviceID SDL_OpenAudioDevice(const char*, int, const SDL_AudioSpec*, SDL_AudioSpec*, int)"); no_thunk(); no_pack(); no_unpack(); no_tab_unpack()
+fn("SDL_AudioDeviceID SDL_OpenAudioDevice_internal(const char*, int, const SDL_AudioSpec*, SDL_AudioSpec*, int)"); no_ldr();
 fn("SDL_AudioSpec* SDL_LoadWAV_RW(SDL_RWops*, int, SDL_AudioSpec*, Uint8**, Uint32*)")
 fn("SDL_AudioStatus SDL_GetAudioDeviceStatus(SDL_AudioDeviceID)")
 fn("SDL_AudioStatus SDL_GetAudioStatus()")
@@ -460,7 +463,10 @@ fn("SDL_threadID SDL_GetThreadID(SDL_Thread*)")
 fn("SDL_threadID SDL_ThreadID()")
 fn("SDL_Thread* SDL_CreateThread(SDL_ThreadFunction, const char*, void*)")
 fn("SDL_Thread* SDL_CreateThreadWithStackSize(SDL_ThreadFunction, const char*, size_t, void*)")
+# special handling because of callback
 fn("SDL_TimerID SDL_AddTimer(Uint32, SDL_TimerCallback, void*)")
+#fn("SDL_TimerID SDL_AddTimer(Uint32, SDL_TimerCallback, void*)"); no_thunk(); no_pack(); no_unpack(); no_tab_unpack()
+#fn("SDL_TimerID SDL_AddTimer(Uint32, SDL_TimerCallback, void*)"); no_ldr();
 fn("SDL_TLSID SDL_TLSCreate()")
 fn("SDL_TouchDeviceType SDL_GetTouchDeviceType(SDL_TouchID)")
 fn("SDL_TouchID SDL_GetTouchDevice(int)")
@@ -603,8 +609,8 @@ fn("void SDL_JoystickGetGUIDString(SDL_JoystickGUID, char*, int)")
 fn("void SDL_JoystickUpdate()")
 fn("void* SDL_LoadFile(const char*, size_t*)")
 fn("void* SDL_LoadFile_RW(SDL_RWops*, size_t*, int)")
-#fn("void* SDL_LoadFunction(void*, const char*)")
-#fn("void* SDL_LoadObject(const char*)")
+#fn("void* SDL_LoadFunction(void*, const char*)") # native impl
+#fn("void* SDL_LoadObject(const char*)") # native impl
 fn("void SDL_LockAudio()")
 fn("void SDL_LockAudioDevice(SDL_AudioDeviceID)")
 fn("void SDL_LockJoysticks()")
@@ -664,7 +670,7 @@ fn("void SDL_StartTextInput()")
 fn("void SDL_StopTextInput()")
 fn("void* SDL_TLSGet(SDL_TLSID)")
 fn("void SDL_UnionRect(const SDL_Rect*, const SDL_Rect*, SDL_Rect*)")
-#fn("void SDL_UnloadObject(void*)")
+#fn("void SDL_UnloadObject(void*)") # native impl
 fn("void SDL_UnlockAudio()")
 fn("void SDL_UnlockAudioDevice(SDL_AudioDeviceID)")
 fn("void SDL_UnlockJoysticks()")

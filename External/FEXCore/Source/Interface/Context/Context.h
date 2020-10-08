@@ -98,6 +98,7 @@ namespace FEXCore::Context {
     Context();
     ~Context();
 
+    bool InitCore(FEXCore::CodeLoader *Loader, FEXCore::SyscallHandler *handler);
     bool InitCore(FEXCore::CodeLoader *Loader);
     FEXCore::Context::ExitReason RunUntilExit();
     int GetProgramStatus();

@@ -49,7 +49,7 @@ void OpDispatchBuilder::SyscallOp(OpcodeArgs) {
 
   if (CTX->Config.Is64BitMode) {
     static std::array<uint64_t, SyscallArgs> GPRIndexes_64 = {
-      FEXCore::X86State::REG_RAX,
+      FEXCore::X86State::REG_RCX,
       FEXCore::X86State::REG_RDI,
       FEXCore::X86State::REG_RSI,
       FEXCore::X86State::REG_RDX,
@@ -84,7 +84,7 @@ void OpDispatchBuilder::SyscallOp(OpcodeArgs) {
     _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs) + GPRIndexes->at(5) * 8, GPRClass),
     _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs) + GPRIndexes->at(6) * 8, GPRClass));
 
-  _StoreContext(GPRClass, GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RAX]), SyscallOp);
+  //_StoreContext(GPRClass, GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RAX]), SyscallOp);
 }
 
 void OpDispatchBuilder::ThunkOp(OpcodeArgs) {

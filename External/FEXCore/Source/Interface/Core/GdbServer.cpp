@@ -485,7 +485,7 @@ GdbServer::HandledPacketType GdbServer::handleXfer(std::string &packet) {
 
     if (object == "exec-file") {
       if (annex_pid == getpid())
-        return {encode(CTX->SyscallHandler->GetFilename()), HandledPacketType::TYPE_ACK};
+        return {encode("dummy"), HandledPacketType::TYPE_ACK};
 
       return {"E00", HandledPacketType::TYPE_ACK};
     }
@@ -551,7 +551,7 @@ GdbServer::HandledPacketType GdbServer::handleProgramOffsets() {
   std::fstream fs;
   fs.open("/proc/self/maps", std::fstream::in | std::fstream::binary);
   std::string Line;
-  std::string const &RuntimeExecutable = CTX->SyscallHandler->GetFilename();
+  std::string const &RuntimeExecutable = "dummy2";
   while (std::getline(fs, Line)) {
     uint64_t Begin, End;
     char Filename[255];

@@ -30,7 +30,8 @@ namespace FEXCore {
         std::shared_mutex ThunksMutex;
 
         std::map<std::string, ThunkedFunction*> Thunks = {
-            { "fex:loadlib", &LoadLib}
+            { "fex:loadlib", &LoadLib},
+            { "fex:callhost", &CallHost}
         };
 
         /*
@@ -43,7 +44,11 @@ namespace FEXCore {
 
             Thread->CTX->HandleCallback((uintptr_t)callback);
         }
-
+        
+        static void CallHost(void *fn) {
+            ((void (*)())fn)();
+        }
+        
         static void LoadLib(void *ArgsV) {
 
             auto Args = reinterpret_cast<LoadlibArgs*>(ArgsV);

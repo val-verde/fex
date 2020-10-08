@@ -79,9 +79,9 @@ uint64_t SyscallHandler::HandleMMAP(FEXCore::Core::InternalThreadState *Thread, 
   if (flags & MAP_FIXED) {
     Base = reinterpret_cast<uint64_t>(addr);
     if (fd != -1) {
-      auto Name = FM.FindFDName(fd);
+      const char *Name = "huh";//FM.FindFDName(fd);
       if (Name) {
-        LogMan::Msg::D("Mapping File to [0x%lx, 0x%lx) -> '%s' -> %p", Base, Base + Size, Name->c_str(), Base);
+        LogMan::Msg::D("Mapping File to [0x%lx, 0x%lx) -> '%s' -> %p", Base, Base + Size, Name, Base);
       }
     }
 
@@ -109,9 +109,9 @@ uint64_t SyscallHandler::HandleMMAP(FEXCore::Core::InternalThreadState *Thread, 
 
     void *HostPtr = reinterpret_cast<void*>(Base);
     if (fd != -1) {
-      auto Name = FM.FindFDName(fd);
+      const char *Name = "huh";//FM.FindFDName(fd);
       if (Name) {
-        LogMan::Msg::D("Mapping File to [0x%lx, 0x%lx) -> '%s' -> %p", Base, Base + Size, Name->c_str(), HostPtr);
+        LogMan::Msg::D("Mapping File to [0x%lx, 0x%lx) -> '%s' -> %p", Base, Base + Size, Name, HostPtr);
       }
     }
 
@@ -150,8 +150,8 @@ void SyscallHandler::DefaultProgramBreak(FEXCore::Core::InternalThreadState *Thr
 }
 
 SyscallHandler::SyscallHandler(FEXCore::Context::Context *ctx)
-  : FM {ctx}
-  , CTX {ctx} {
+//   : FM {ctx}
+  : CTX {ctx} {
 }
 
 SyscallHandler *CreateHandler(Context::OperatingMode Mode, FEXCore::Context::Context *ctx) {

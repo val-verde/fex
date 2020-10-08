@@ -48,8 +48,8 @@ public:
 
   void DefaultProgramBreak(FEXCore::Core::InternalThreadState *Thread, uint64_t Addr);
 
-  void SetFilename(std::string const &File) { FM.SetFilename(File); }
-  std::string const & GetFilename() const { return FM.GetFilename(); }
+  void SetFilename(std::string const &File) { }
+  std::string const & GetFilename() const { static const std::string dummy = "dummy"; return dummy; }
 
   using SyscallPtrArg0 = uint64_t(*)(FEXCore::Core::InternalThreadState *Thread);
   using SyscallPtrArg1 = uint64_t(*)(FEXCore::Core::InternalThreadState *Thread, uint64_t);
@@ -83,7 +83,7 @@ public:
   uint64_t HandleBRK(FEXCore::Core::InternalThreadState *Thread, void *Addr);
   uint64_t HandleMMAP(FEXCore::Core::InternalThreadState *Thread, void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 
-  FileManager FM;
+//   FileManager FM;
 
 #ifdef DEBUG_STRACE
   virtual void Strace(FEXCore::HLE::SyscallArguments *Args, uint64_t Ret) = 0;

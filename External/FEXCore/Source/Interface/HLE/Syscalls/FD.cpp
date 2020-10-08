@@ -77,23 +77,15 @@ namespace FEXCore::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(open, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname, int flags, uint32_t mode) -> uint64_t {
-      flags = RemapFlags(flags);
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Open(pathname, flags, mode);
-      SYSCALL_ERRNO();
+      return -EFAULT;
     });
 
     REGISTER_SYSCALL_IMPL(close, [](FEXCore::Core::InternalThreadState *Thread, int fd) -> uint64_t {
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Close(fd);
-      SYSCALL_ERRNO();
+      return -EFAULT;
     });
 
     REGISTER_SYSCALL_IMPL(stat, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname, FEXCore::guest_stat *buf) -> uint64_t {
-      struct stat host_stat;
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Stat(pathname, &host_stat);
-      if (Result != -1) {
-        CopyStat(buf, &host_stat);
-      }
-      SYSCALL_ERRNO();
+      return -EFAULT;
     });
 
     REGISTER_SYSCALL_IMPL(fstat, [](FEXCore::Core::InternalThreadState *Thread, int fd, FEXCore::guest_stat *buf) -> uint64_t {
@@ -106,12 +98,7 @@ namespace FEXCore::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(lstat, [](FEXCore::Core::InternalThreadState *Thread, const char *path, FEXCore::guest_stat *buf) -> uint64_t {
-      struct stat host_stat;
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Lstat(path, &host_stat);
-      if (Result != -1) {
-        CopyStat(buf, &host_stat);
-      }
-      SYSCALL_ERRNO();
+      return -EFAULT;
     });
 
     /*
@@ -163,8 +150,7 @@ namespace FEXCore::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(access, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname, int mode) -> uint64_t {
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Access(pathname, mode);
-      SYSCALL_ERRNO();
+      return -EFAULT;
     });
 
     REGISTER_SYSCALL_IMPL(pipe, [](FEXCore::Core::InternalThreadState *Thread, int pipefd[2]) -> uint64_t {
@@ -281,8 +267,7 @@ namespace FEXCore::HLE {
 
     REGISTER_SYSCALL_IMPL(openat, [](FEXCore::Core::InternalThreadState *Thread, int dirfs, const char *pathname, int flags, uint32_t mode) -> uint64_t {
       flags = RemapFlags(flags);
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Openat(dirfs, pathname, flags, mode);
-      SYSCALL_ERRNO();
+      return -EFAULT;
     });
 
     REGISTER_SYSCALL_IMPL(mkdirat, [](FEXCore::Core::InternalThreadState *Thread, int dirfd, const char *pathname, mode_t mode) -> uint64_t {
@@ -335,8 +320,7 @@ namespace FEXCore::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(readlinkat, [](FEXCore::Core::InternalThreadState *Thread, int dirfd, const char *pathname, char *buf, size_t bufsiz) -> uint64_t {
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Readlinkat(dirfd, pathname, buf, bufsiz);
-      SYSCALL_ERRNO();
+      return -EFAULT;
     });
 
     REGISTER_SYSCALL_IMPL(fchmodat, [](FEXCore::Core::InternalThreadState *Thread, int dirfd, const char *pathname, mode_t mode, int flags) -> uint64_t {
@@ -345,8 +329,7 @@ namespace FEXCore::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(faccessat, [](FEXCore::Core::InternalThreadState *Thread, int dirfd, const char *pathname, int mode, int flags) -> uint64_t {
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.FAccessat(dirfd, pathname, mode, flags);
-      SYSCALL_ERRNO();
+      return -EFAULT;
     });
 
     REGISTER_SYSCALL_IMPL(splice, [](FEXCore::Core::InternalThreadState *Thread, int fd_in, loff_t *off_in, int fd_out, loff_t *off_out, size_t len, unsigned int flags) -> uint64_t {
@@ -417,8 +400,7 @@ namespace FEXCore::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(statx, [](FEXCore::Core::InternalThreadState *Thread, int dirfd, const char *pathname, int flags, uint32_t mask, struct statx *statxbuf) -> uint64_t {
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Statx(dirfd, pathname, flags, mask, statxbuf);
-      SYSCALL_ERRNO();
+      return -EFAULT;
     });
 
     REGISTER_SYSCALL_IMPL(pselect6, [](FEXCore::Core::InternalThreadState *Thread, int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const struct timespec *timeout, const sigset_t *sigmask) -> uint64_t {

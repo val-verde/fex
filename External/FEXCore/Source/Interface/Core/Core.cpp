@@ -230,7 +230,11 @@ namespace FEXCore::Context {
   }
 
   bool Context::InitCore(FEXCore::CodeLoader *Loader) {
-    SyscallHandler.reset(FEXCore::CreateHandler(Config.Is64BitMode ? OperatingMode::MODE_64BIT : OperatingMode::MODE_32BIT, this));
+      return InitCore(Loader, FEXCore::CreateHandler(Config.Is64BitMode ? OperatingMode::MODE_64BIT : OperatingMode::MODE_32BIT, this));
+  }
+
+  bool Context::InitCore(FEXCore::CodeLoader *Loader, FEXCore::SyscallHandler *handler) {
+    SyscallHandler.reset(handler);
     ThunkHandler.reset(FEXCore::ThunkHandler::Create());
 
     LocalLoader = Loader;

@@ -374,6 +374,7 @@ void *InterpreterCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true
 
 void InterpreterCore::ExecuteCode(FEXCore::Core::InternalThreadState *Thread) {
   volatile void* stack = alloca(0);
+  printf("Running %lX\n", Thread->State.State.rip);
   auto IR = Thread->IRLists.find(Thread->State.State.rip);
   auto CurrentIR = IR->second.get();
 

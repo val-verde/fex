@@ -67,8 +67,7 @@ namespace FEXCore::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(readlink, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname, char *buf, size_t bufsiz) -> uint64_t {
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Readlink(pathname, buf, bufsiz);
-      SYSCALL_ERRNO();
+      return -ENOSYS;
     });
 
     REGISTER_SYSCALL_IMPL(chmod, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname, mode_t mode) -> uint64_t {
@@ -82,8 +81,7 @@ namespace FEXCore::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(mknod, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname, mode_t mode, dev_t dev) -> uint64_t {
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Mknod(pathname, mode, dev);
-      SYSCALL_ERRNO();
+      return -ENOSYS;
     });
 
     REGISTER_SYSCALL_IMPL(ustat, [](FEXCore::Core::InternalThreadState *Thread, dev_t dev, struct ustat *ubuf) -> uint64_t {
@@ -110,8 +108,7 @@ namespace FEXCore::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(statfs, [](FEXCore::Core::InternalThreadState *Thread, const char *path, struct statfs *buf) -> uint64_t {
-      uint64_t Result = Thread->CTX->SyscallHandler->FM.Statfs(path, buf);
-      SYSCALL_ERRNO();
+      return -ENOSYS;
     });
 
     REGISTER_SYSCALL_IMPL(fstatfs, [](FEXCore::Core::InternalThreadState *Thread, int fd, struct statfs *buf) -> uint64_t {

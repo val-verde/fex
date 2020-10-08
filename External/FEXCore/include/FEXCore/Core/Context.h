@@ -7,6 +7,7 @@
 
 namespace FEXCore {
   class CodeLoader;
+  class SyscallHandler;
 }
 
 namespace FEXCore::Core {
@@ -92,6 +93,7 @@ namespace FEXCore::Context {
    * @return true if we loaded code
    */
   bool InitCore(FEXCore::Context::Context *CTX, FEXCore::CodeLoader *Loader);
+  bool InitCore(FEXCore::Context::Context *CTX, FEXCore::CodeLoader *Loader, FEXCore::SyscallHandler *handler);
 
   void SetApplicationFile(FEXCore::Context::Context *CTX, std::string const &File);
 

@@ -37,6 +37,10 @@ namespace FEXCore::Context {
     // CTX->LoadEntryList();
   }
 
+  bool InitCore(FEXCore::Context::Context *CTX, FEXCore::CodeLoader *Loader, FEXCore::SyscallHandler *handler) {
+    return CTX->InitCore(Loader, handler);
+  }
+
   bool InitCore(FEXCore::Context::Context *CTX, FEXCore::CodeLoader *Loader) {
     return CTX->InitCore(Loader);
   }

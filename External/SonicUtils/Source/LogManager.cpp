@@ -23,7 +23,7 @@ void InstallHandler(ThrowHandler Handler) { Handlers.emplace_back(Handler); }
     Handler(Buffer);
   }
 
-  __builtin_trap();
+//  __builtin_trap();
 }
 } // namespace Throw
 

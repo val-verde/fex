@@ -597,6 +597,7 @@ namespace FEXCore::Context {
   }
 
   void Context::ClearCodeCache(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP) {
+    printf("Code cache clear\n");
     Thread->BlockCache->ClearCache();
     Thread->CPUBackend->ClearCache();
     Thread->IntBackend->ClearCache();
@@ -612,6 +613,8 @@ namespace FEXCore::Context {
   }
 
   uintptr_t Context::CompileBlock(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP) {
+    //printf("COMPILING BLOCK 0x%lX\n", GuestRIP);
+
     void *CodePtr {nullptr};
     uint8_t const *GuestCode{};
     if (Thread->CTX->Config.UnifiedMemory) {
@@ -848,6 +851,8 @@ namespace FEXCore::Context {
   }
 
   void Context::RemoveCodeEntry(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP) {
+    printf("Thread %p: Removing 0x%lX\n", Thread, GuestRIP);
+
     Thread->IRLists.erase(GuestRIP);
     Thread->DebugData.erase(GuestRIP);
     Thread->BlockCache->Erase(GuestRIP);

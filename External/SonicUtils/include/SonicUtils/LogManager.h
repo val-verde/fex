@@ -20,7 +20,7 @@ namespace Throw {
 using ThrowHandler = void(*)(char const *Message);
 void InstallHandler(ThrowHandler Handler);
 
-[[noreturn]] void M(const char *fmt, va_list args);
+void M(const char *fmt, va_list args);
 
 #if defined(ASSERTIONS_ENABLED) && ASSERTIONS_ENABLED
 static inline void A(bool Value, const char *fmt, ...) {

@@ -8,14 +8,14 @@ namespace Throw {
 std::vector<ThrowHandler> Handlers;
 void InstallHandler(ThrowHandler Handler) { Handlers.emplace_back(Handler); }
 
-[[noreturn]] void M(const char *fmt, va_list args) {
+void M(const char *fmt, va_list args) {
   char Buffer[1024];
   vsnprintf(Buffer, 1024, fmt, args);
   for (auto &Handler : Handlers) {
     Handler(Buffer);
   }
 
-  __builtin_trap();
+//  __builtin_trap();
 }
 } // namespace Throw
 

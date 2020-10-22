@@ -74,19 +74,19 @@ friend class FEXCore::IR::PassManager;
     return _Bfi(ssa0, ssa1, Width, lsb);
   }
   IRPair<IROp_StoreMem> _StoreMem(FEXCore::IR::RegisterClassType Class, uint8_t Size, OrderedNode *ssa0, OrderedNode *ssa1, uint8_t Align = 1) {
-    return _StoreMem(ssa0, ssa1, Size, Align, Class);
+    return _StoreMem(ssa0, ssa1, Invalid(), Size, Align, Class);
   }
   IRPair<IROp_StoreMemTSO> _StoreMemTSO(FEXCore::IR::RegisterClassType Class, uint8_t Size, OrderedNode *ssa0, OrderedNode *ssa1, uint8_t Align = 1) {
-    return _StoreMemTSO(ssa0, ssa1, Size, Align, Class);
+    return _StoreMemTSO(ssa0, ssa1, Invalid(), Size, Align, Class);
   }
   IRPair<IROp_VStoreMemElement> _VStoreMemElement(uint8_t RegisterSize, uint8_t ElementSize, OrderedNode *ssa0, OrderedNode *ssa1, uint8_t Index, uint8_t Align = 1) {
     return _VStoreMemElement(ssa0, ssa1, Index, Align, RegisterSize, ElementSize);
   }
   IRPair<IROp_LoadMem> _LoadMem(FEXCore::IR::RegisterClassType Class, uint8_t Size, OrderedNode *ssa0, uint8_t Align = 1) {
-    return _LoadMem(ssa0, Size, Align, Class);
+    return _LoadMem(ssa0, Invalid(), Size, Align, Class);
   }
   IRPair<IROp_LoadMemTSO> _LoadMemTSO(FEXCore::IR::RegisterClassType Class, uint8_t Size, OrderedNode *ssa0, uint8_t Align = 1) {
-    return _LoadMemTSO(ssa0, Size, Align, Class);
+    return _LoadMemTSO(ssa0, Invalid(), Size, Align, Class);
   }
   IRPair<IROp_VLoadMemElement> _VLoadMemElement(uint8_t RegisterSize, uint8_t ElementSize, OrderedNode *ssa0, OrderedNode *ssa1, uint8_t Index, uint8_t Align = 1) {
     return _VLoadMemElement(ssa0, ssa1, Index, Align, RegisterSize, ElementSize);
@@ -428,6 +428,15 @@ friend class FEXCore::IR::PassManager;
        return true;
      }
      return false;
+  }
+
+  FEXCore::IR::IROp_Header *GetOpHeader(OrderedNodeWrapper ssa) {
+    OrderedNode *RealNode = ssa.GetNode(ListData.Begin());
+    return RealNode->Op(Data.Begin());
+  }
+
+  OrderedNode *UnwarpNode(OrderedNodeWrapper ssa) {
+    return ssa.GetNode(ListData.Begin());
   }
 
   // Overwrite a node with a constant

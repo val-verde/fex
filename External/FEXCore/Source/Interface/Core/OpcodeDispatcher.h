@@ -25,6 +25,7 @@ friend class FEXCore::IR::Pass;
 friend class FEXCore::IR::PassManager;
 public:
   bool cmpOp = false;
+  uint8_t cmpSize = 0;
   OrderedNode* cmpDest, *cmpSrc;
 
   FEXCore::Context::Context *CTX{};

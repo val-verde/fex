@@ -1094,10 +1094,13 @@ DEF_OP(Sbfe) {
   }
 }
 
+#define GRCMP(Node) (Op->CompareSize == 4 ? GetReg<RA_32>(Node) : GetReg<RA_64>(Node))
+
+
 DEF_OP(Select) {
   auto Op = IROp->C<IR::IROp_Select>();
 
-  cmp(GetReg<RA_64>(Op->Header.Args[0].ID()), GetReg<RA_64>(Op->Header.Args[1].ID()));
+  cmp(GRCMP(Op->Header.Args[0].ID()), GRCMP(Op->Header.Args[1].ID()));
 
   switch (Op->Cond.Val) {
   case FEXCore::IR::COND_EQ:

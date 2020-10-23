@@ -830,28 +830,37 @@ void OpDispatchBuilder::CondJUMPOp(OpcodeArgs) {
   if (cmpOp) {
     //printf("%08X OP\n", Op->OP);
     if (Op->OP == 0x7F || Op->OP == 0x8F) {
-      SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch);
+      SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
       //printf("JCC SGT OPT!\n");
-    }
-
-    if (Op->OP == 0x7E || Op->OP == 0x8E) {
-      SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch);
+    } else if (Op->OP == 0x7E || Op->OP == 0x8E) {
+      SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
       //printf("JCC SLE OPT!\n");
-    }
-
-    if (Op->OP == 0x7C || Op->OP == 0x8C) {
-      SrcCond = _Select(FEXCore::IR::COND_SLT, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch);
-      //printf("JCC SLE OPT!\n");
-    }
-
-    if (Op->OP == 0x74 || Op->OP == 0x84) {
-      SrcCond = _Select(FEXCore::IR::COND_EQ, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch);
+    } else if (Op->OP == 0x7C || Op->OP == 0x8C) {
+      SrcCond = _Select(FEXCore::IR::COND_SLT, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
+      //printf("JCC SLT OPT!\n");
+    } else if (Op->OP == 0x74 || Op->OP == 0x84) {
+      SrcCond = _Select(FEXCore::IR::COND_EQ, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
      // printf("JCC EQ OPT!\n");
-    }
-
-    if (Op->OP == 0x75 || Op->OP == 0x85) {
-      SrcCond = _Select(FEXCore::IR::COND_NEQ, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch);
+    } else if (Op->OP == 0x75 || Op->OP == 0x85) {
+      SrcCond = _Select(FEXCore::IR::COND_NEQ, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
       //printf("JCC NE OPT!\n");
+    } else if (Op->OP == 0x76 || Op->OP == 0x86) {
+      SrcCond = _Select(FEXCore::IR::COND_ULE, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
+      //printf("JCC NA OPT!\n");
+    } else if (Op->OP == 0x77 || Op->OP == 0x87) {
+      SrcCond = _Select(FEXCore::IR::COND_UGT, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
+      //printf("JCC A OPT!\n");
+    } else if (Op->OP == 0x72 || Op->OP == 0x82) {
+      SrcCond = _Select(FEXCore::IR::COND_ULT, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
+      //printf("JCC C OPT!\n");
+    } else if (Op->OP == 0x73 || Op->OP == 0x83) {
+      SrcCond = _Select(FEXCore::IR::COND_UGE, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
+      //printf("JCC NC OPT!\n");
+    } else if (Op->OP == 0x7D || Op->OP == 0x8D) {
+      SrcCond = _Select(FEXCore::IR::COND_SGE, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
+      //printf("JCC NC OPT!\n");
+    } else {
+      //printf("JCC %04X OP\n", Op->OP);
     }
   }
   LogMan::Throw::A(Op->Src[0].TypeNone.Type == FEXCore::X86Tables::DecodedOperand::TYPE_LITERAL, "Src1 needs to be literal here");
@@ -1312,10 +1321,12 @@ void OpDispatchBuilder::CMPOp(OpcodeArgs) {
   }
 
   GenerateFlags_SUB(Op, Result, Dest, Src);
-
-  cmpOp = true;
-  cmpDest = Dest;
-  cmpSrc = Src;
+  if (Size >= 4) {
+    cmpSize = Size;
+    cmpOp = true;
+    cmpDest = Dest;
+    cmpSrc = Src;
+  }
 }
 
 void OpDispatchBuilder::CQOOp(OpcodeArgs) {
@@ -1705,11 +1716,11 @@ void OpDispatchBuilder::CMOVOp(OpcodeArgs) {
 
   if (cmpOp) {
     if (Op->OP == 0x4F) {
-      SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDest, cmpSrc, Src, Dest);
-      printf("SGT OPT!\n");
+      SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDest, cmpSrc, Src, Dest, cmpSize);
+      //printf("SGT OPT!\n");
     } else if (Op->OP == 0x4E) {
-      SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDest, cmpSrc, Src, Dest);
-      printf("SLE OPT!\n");
+      SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDest, cmpSrc, Src, Dest, cmpSize);
+      //printf("SLE OPT!\n");
     }
   }
 

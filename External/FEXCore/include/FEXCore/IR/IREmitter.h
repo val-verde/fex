@@ -91,8 +91,8 @@ friend class FEXCore::IR::PassManager;
   IRPair<IROp_VLoadMemElement> _VLoadMemElement(uint8_t RegisterSize, uint8_t ElementSize, OrderedNode *ssa0, OrderedNode *ssa1, uint8_t Index, uint8_t Align = 1) {
     return _VLoadMemElement(ssa0, ssa1, Index, Align, RegisterSize, ElementSize);
   }
-  IRPair<IROp_Select> _Select(uint8_t Cond, OrderedNode *ssa0, OrderedNode *ssa1, OrderedNode *ssa2, OrderedNode *ssa3) {
-    return _Select(ssa0, ssa1, ssa2, ssa3, {Cond});
+  IRPair<IROp_Select> _Select(uint8_t Cond, OrderedNode *ssa0, OrderedNode *ssa1, OrderedNode *ssa2, OrderedNode *ssa3, uint8_t CompareSize = 8) {
+    return _Select(ssa0, ssa1, ssa2, ssa3, {Cond}, CompareSize);
   }
   IRPair<IROp_Sext> _Sext(uint8_t SrcSize, OrderedNode *ssa0) {
     return _Sext(ssa0, SrcSize);

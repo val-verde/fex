@@ -642,6 +642,7 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
     stp(TMP1, lr, MemOperand(sp, -16, PreIndex));
   }
 
+  PendingTargetLabel = nullptr;
   for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
     using namespace FEXCore::IR;
     auto BlockIROp = BlockHeader->CW<FEXCore::IR::IROp_CodeBlock>();
@@ -654,6 +655,11 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
         IsTarget = JumpTargets.try_emplace(Node).first;
       }
 
+      if (PendingTargetLabel && PendingTargetLabel != &IsTarget->second)
+      {
+        b(PendingTargetLabel);
+      }
+      PendingTargetLabel = nullptr;
       bind(&IsTarget->second);
     }
 

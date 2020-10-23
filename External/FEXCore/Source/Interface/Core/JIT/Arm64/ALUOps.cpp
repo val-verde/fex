@@ -1237,6 +1237,7 @@ void JITCore::RegisterALUHandlers() {
   REGISTER_OP(TRUNCELEMENTPAIR,  TruncElementPair);
   REGISTER_OP(CONSTANT,          Constant);
   REGISTER_OP(INLINECONSTANT,    InlineConstant);
+  REGISTER_OP(INVALIDATEFLAGS,   InlineConstant);
   REGISTER_OP(CYCLECOUNTER,      CycleCounter);
   REGISTER_OP(ADD,               Add);
   REGISTER_OP(SUB,               Sub);

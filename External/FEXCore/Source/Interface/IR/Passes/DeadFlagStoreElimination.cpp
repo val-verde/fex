@@ -75,8 +75,8 @@ bool DeadFlagStoreElimination::Run(IREmitter *IREmit) {
         else if (IROp->Op == OP_CONDJUMP) {
           auto Op = IROp->CW<IR::IROp_CondJump>();
 
-          OrderedNode *TrueTargetNode = CurrentIR.GetNode(Op->Header.Args[1]);
-          OrderedNode *FalseTargetNode = CurrentIR.GetNode(Op->Header.Args[2]);
+          OrderedNode *TrueTargetNode = CurrentIR.GetNode(Op->Header.Args[3]);
+          OrderedNode *FalseTargetNode = CurrentIR.GetNode(Op->Header.Args[4]);
 
           // stores to remove are written by the next blocks but not read
           FlagMap[BlockNode].kill = FlagMap[TrueTargetNode].writes & ~(FlagMap[TrueTargetNode].reads);

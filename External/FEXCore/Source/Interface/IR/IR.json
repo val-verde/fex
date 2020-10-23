@@ -374,12 +374,18 @@
     "CondJump": {
       "HasSideEffects": true,
       "OpClass": "Branch",
-      "SSAArgs": "3",
-      "RAOverride": "1",
+      "SSAArgs": "5",
+      "RAOverride": "2",
       "SSANames": [
         "Cond",
+        "Comp",
+        "Pad",
         "TrueBlock",
         "FalseBlock"
+      ],
+      "Args": [
+        "CondClassType", "Operation",
+        "uint8_t", "CompareSize"
       ]
     },
 

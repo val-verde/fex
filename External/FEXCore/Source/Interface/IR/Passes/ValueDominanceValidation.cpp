@@ -38,19 +38,19 @@ bool ValueDominanceValidation::Run(IREmitter *IREmit) {
         case IR::OP_CONDJUMP: {
           auto Op = IROp->CW<IR::IROp_CondJump>();
 
-          OrderedNode *TrueTargetNode = CurrentIR.GetNode(Op->Header.Args[1]);
-          OrderedNode *FalseTargetNode = CurrentIR.GetNode(Op->Header.Args[2]);
+          OrderedNode *TrueTargetNode = CurrentIR.GetNode(Op->Header.Args[3]);
+          OrderedNode *FalseTargetNode = CurrentIR.GetNode(Op->Header.Args[4]);
 
           CurrentBlock->Successors.emplace_back(TrueTargetNode);
           CurrentBlock->Successors.emplace_back(FalseTargetNode);
 
           {
-            auto Block = &OffsetToBlockMap.try_emplace(Op->Header.Args[1].ID()).first->second;
+            auto Block = &OffsetToBlockMap.try_emplace(Op->Header.Args[3].ID()).first->second;
             Block->Predecessors.emplace_back(BlockNode);
           }
 
           {
-            auto Block = &OffsetToBlockMap.try_emplace(Op->Header.Args[2].ID()).first->second;
+            auto Block = &OffsetToBlockMap.try_emplace(Op->Header.Args[4].ID()).first->second;
             Block->Predecessors.emplace_back(BlockNode);
           }
 

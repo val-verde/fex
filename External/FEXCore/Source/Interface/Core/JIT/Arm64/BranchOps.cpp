@@ -79,11 +79,11 @@ DEF_OP(CondJump) {
   Label *TrueTargetLabel;
   Label *FalseTargetLabel;
 
-  auto TrueIter = JumpTargets.find(Op->Header.Args[1].ID());
-  auto FalseIter = JumpTargets.find(Op->Header.Args[2].ID());
+  auto TrueIter = JumpTargets.find(Op->Header.Args[3].ID());
+  auto FalseIter = JumpTargets.find(Op->Header.Args[4].ID());
 
   if (TrueIter == JumpTargets.end()) {
-    TrueTargetLabel = &JumpTargets.try_emplace(Op->Header.Args[1].ID()).first->second;
+    TrueTargetLabel = &JumpTargets.try_emplace(Op->Header.Args[3].ID()).first->second;
   }
   else {
     TrueTargetLabel = &TrueIter->second;
@@ -91,7 +91,7 @@ DEF_OP(CondJump) {
 
   cbnz(GetReg<RA_64>(Op->Header.Args[0].ID()), TrueTargetLabel);
   if (FalseIter == JumpTargets.end()) {
-    FalseTargetLabel = &JumpTargets.try_emplace(Op->Header.Args[2].ID()).first->second;
+    FalseTargetLabel = &JumpTargets.try_emplace(Op->Header.Args[4].ID()).first->second;
     PendingTargetLabel = FalseTargetLabel;
   }
   else {

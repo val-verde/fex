@@ -442,6 +442,7 @@ void InterpreterCore::ExecuteCode(FEXCore::Core::InternalThreadState *Thread) {
           case IR::OP_DUMMY:
           case IR::OP_BEGINBLOCK:
           case IR::OP_ENDBLOCK:
+          case IR::OP_INVALIDATEFLAGS:
             break;
           case IR::OP_FENCE: {
             auto Op = IROp->C<IR::IROp_Fence>();
@@ -467,10 +468,10 @@ void InterpreterCore::ExecuteCode(FEXCore::Core::InternalThreadState *Thread) {
             auto Op = IROp->C<IR::IROp_CondJump>();
             uint64_t Arg = *GetSrc<uint64_t*>(SSAData, Op->Header.Args[0]);
             if (!!Arg) {
-              BlockIterator = NodeIterator(ListBegin, DataBegin, Op->Header.Args[1]);
+              BlockIterator = NodeIterator(ListBegin, DataBegin, Op->Header.Args[3]);
             }
             else  {
-              BlockIterator = NodeIterator(ListBegin, DataBegin, Op->Header.Args[2]);
+              BlockIterator = NodeIterator(ListBegin, DataBegin, Op->Header.Args[4]);
             }
             BlockResults.Redo = true;
             return;

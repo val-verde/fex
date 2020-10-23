@@ -24,7 +24,7 @@ class OpDispatchBuilder final : public IREmitter {
 friend class FEXCore::IR::Pass;
 friend class FEXCore::IR::PassManager;
 public:
-  bool cmpOp = false;
+  int flagsOp = 0;;
   uint8_t cmpSize = 0;
   OrderedNode* cmpDest, *cmpSrc;
 

@@ -830,13 +830,13 @@ void OpDispatchBuilder::CondJUMPOp(OpcodeArgs) {
   if (flagsOp == 1) {
     //printf("%08X OP\n", Op->OP);
     if (Op->OP == 0x7F || Op->OP == 0x8F) {
-      SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
+      SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDestSigned, cmpSrcSigned, TakeBranch, DoNotTakeBranch, cmpSize);
       //printf("JCC SGT OPT!\n");
     } else if (Op->OP == 0x7E || Op->OP == 0x8E) {
-      SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
+      SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDestSigned, cmpSrcSigned, TakeBranch, DoNotTakeBranch, cmpSize);
       //printf("JCC SLE OPT!\n");
     } else if (Op->OP == 0x7C || Op->OP == 0x8C) {
-      SrcCond = _Select(FEXCore::IR::COND_SLT, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
+      SrcCond = _Select(FEXCore::IR::COND_SLT, cmpDestSigned, cmpSrcSigned, TakeBranch, DoNotTakeBranch, cmpSize);
       //printf("JCC SLT OPT!\n");
     } else if (Op->OP == 0x74 || Op->OP == 0x84) {
       SrcCond = _Select(FEXCore::IR::COND_EQ, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
@@ -857,7 +857,7 @@ void OpDispatchBuilder::CondJUMPOp(OpcodeArgs) {
       SrcCond = _Select(FEXCore::IR::COND_UGE, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
       //printf("JCC NC OPT!\n");
     } else if (Op->OP == 0x7D || Op->OP == 0x8D) {
-      SrcCond = _Select(FEXCore::IR::COND_SGE, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
+      SrcCond = _Select(FEXCore::IR::COND_SGE, cmpDestSigned, cmpSrcSigned, TakeBranch, DoNotTakeBranch, cmpSize);
       //printf("JCC NC OPT!\n");
     } else {
       //printf("JCC %04X OP\n", Op->OP);
@@ -1343,8 +1343,13 @@ void OpDispatchBuilder::CMPOp(OpcodeArgs) {
   if (Size >= 4) {
     cmpSize = Size;
     flagsOp = 1;
-    cmpDest = Dest;
-    cmpSrc = Src;
+    cmpDestSigned = cmpDest = Dest;
+    cmpSrcSigned = cmpSrc = Src;
+  } else {
+    cmpSize = 4;
+    flagsOp = 1;
+    cmpDestSigned = _Sext(Size * 8, cmpDest = Dest);
+    cmpSrcSigned = _Sext(Size * 8, cmpSrc = Src);
   }
 }
 
@@ -1735,10 +1740,10 @@ void OpDispatchBuilder::CMOVOp(OpcodeArgs) {
 
   if (flagsOp == 1) {
     if (Op->OP == 0x4F) {
-      SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDest, cmpSrc, Src, Dest, cmpSize);
+      SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDestSigned, cmpSrcSigned, Src, Dest, cmpSize);
       //printf("SGT OPT!\n");
     } else if (Op->OP == 0x4E) {
-      SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDest, cmpSrc, Src, Dest, cmpSize);
+      SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDestSigned, cmpSrcSigned, Src, Dest, cmpSize);
       //printf("SLE OPT!\n");
     }
   }

@@ -27,6 +27,7 @@ public:
   int flagsOp = 0;;
   uint8_t cmpSize = 0;
   OrderedNode* cmpDest, *cmpSrc;
+  OrderedNode* cmpDestSigned, *cmpSrcSigned;
 
   FEXCore::Context::Context *CTX{};
   bool ShouldDump {false};

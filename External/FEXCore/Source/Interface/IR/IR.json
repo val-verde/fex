@@ -1176,7 +1176,8 @@
         "FalseVal"
       ],
       "Args": [
-        "CondClassType", "Cond"
+        "CondClassType", "Cond",
+        "uint8_t", "CompareSize"
       ]
     },
 

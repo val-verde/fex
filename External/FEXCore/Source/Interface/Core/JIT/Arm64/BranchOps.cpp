@@ -73,6 +73,8 @@ DEF_OP(Jump) {
   b(TargetLabel);
 }
 
+#define GRCMP(Node) (Op->CompareSize == 4 ? GetReg<RA_32>(Node) : GetReg<RA_64>(Node))
+
 DEF_OP(CondJump) {
   auto Op = IROp->C<IR::IROp_CondJump>();
 
@@ -89,7 +91,56 @@ DEF_OP(CondJump) {
     TrueTargetLabel = &TrueIter->second;
   }
 
-  cbnz(GetReg<RA_64>(Op->Header.Args[0].ID()), TrueTargetLabel);
+  if (Op->Header.Args[1].IsInvalid()) {
+    cbnz(GetReg<RA_64>(Op->Header.Args[0].ID()), TrueTargetLabel);
+  } else {
+      uint64_t Const;
+      if (IsInlineConstant(Op->Header.Args[1], &Const))
+        cmp(GRCMP(Op->Header.Args[0].ID()), Const);
+      else
+        cmp(GRCMP(Op->Header.Args[0].ID()), GRCMP(Op->Header.Args[1].ID()));
+
+      switch (Op->Operation.Val) {
+      case FEXCore::IR::COND_EQ:
+        b(TrueTargetLabel, Condition::eq);
+      break;
+      case FEXCore::IR::COND_NEQ:
+        b(TrueTargetLabel, Condition::ne);
+      break;
+      case FEXCore::IR::COND_SGE:
+        b(TrueTargetLabel, Condition::ge);
+      break;
+      case FEXCore::IR::COND_SLT:
+        b(TrueTargetLabel, Condition::lt);
+      break;
+      case FEXCore::IR::COND_SGT:
+        b(TrueTargetLabel, Condition::gt);
+      break;
+      case FEXCore::IR::COND_SLE:
+        b(TrueTargetLabel, Condition::le);
+      break;
+      case FEXCore::IR::COND_UGE:
+        b(TrueTargetLabel, Condition::cs);
+      break;
+      case FEXCore::IR::COND_ULT:
+        b(TrueTargetLabel, Condition::cc);
+      break;
+      case FEXCore::IR::COND_UGT:
+        b(TrueTargetLabel, Condition::hi);
+      break;
+      case FEXCore::IR::COND_ULE:
+        b(TrueTargetLabel, Condition::ls);
+      break;
+      case FEXCore::IR::COND_MI:
+      case FEXCore::IR::COND_PL:
+      case FEXCore::IR::COND_VS:
+      case FEXCore::IR::COND_VC:
+      default:
+      LogMan::Msg::A("Unsupported compare type");
+      break;
+      }
+  }
+  
   if (FalseIter == JumpTargets.end()) {
     FalseTargetLabel = &JumpTargets.try_emplace(Op->Header.Args[4].ID()).first->second;
     PendingTargetLabel = FalseTargetLabel;

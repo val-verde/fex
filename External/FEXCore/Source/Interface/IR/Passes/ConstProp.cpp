@@ -357,6 +357,28 @@ bool ConstProp::Run(IREmitter *IREmit) {
       }
       break;
     }
+
+    case OP_CONDJUMP: {
+      auto Op = IROp->CW<IR::IROp_CondJump>();
+
+      auto Select = IREmit->GetOpHeader(Op->Header.Args[0]);
+      if (Select->Op == OP_SELECT) {
+        
+        uint64_t Constant1;
+        uint64_t Constant2;
+
+        if (IREmit->IsValueConstant(Select->Args[2], &Constant1) && IREmit->IsValueConstant(Select->Args[3], &Constant2)) {
+          if (Constant1 == 1 && Constant2 == 0) {
+            auto slc = Select->C<IR::IROp_Select>();
+            //printf("MATCH cc: %d\n", slc->Cond);
+            IREmit->ReplaceNodeArgument(CodeNode, 0, IREmit->UnwarpNode(Select->Args[0]));
+            IREmit->ReplaceNodeArgument(CodeNode, 1, IREmit->UnwarpNode(Select->Args[1]));
+            Op->Operation = slc->Cond;
+            Op->CompareSize = slc->CompareSize;
+          }
+        }
+      }
+    }
     default: break;
     }
   }
@@ -411,6 +433,23 @@ bool ConstProp::Run(IREmitter *IREmit) {
         case OP_SELECT:
         {
           auto Op = IROp->C<IR::IROp_Select>();
+
+          uint64_t Constant2;
+          if (IREmit->IsValueConstant(Op->Header.Args[1], &Constant2)) {
+            if (IsImmAddSub(Constant2)) {
+              IREmit->SetWriteCursor(CurrentIR.GetNode(Op->Header.Args[1]));
+
+              IREmit->ReplaceNodeArgument(CodeNode, 1, IREmit->_InlineConstant(Constant2));
+              
+              Changed = true;
+            }
+          }
+          break;
+        }
+
+        case OP_CONDJUMP:
+        {
+          auto Op = IROp->C<IR::IROp_CondJump>();
 
           uint64_t Constant2;
           if (IREmit->IsValueConstant(Op->Header.Args[1], &Constant2)) {

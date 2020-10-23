@@ -144,6 +144,8 @@ void OpDispatchBuilder::NOPOp(OpcodeArgs) {
 void OpDispatchBuilder::RETOp(OpcodeArgs) {
   uint8_t GPRSize = CTX->Config.Is64BitMode ? 8 : 4;
 
+  _InvalidateFlags();
+  
   auto Constant = _Constant(GPRSize);
 
   auto OldSP = _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RSP]), GPRClass);
@@ -622,6 +624,9 @@ void OpDispatchBuilder::CALLOp(OpcodeArgs) {
   uint8_t GPRSize = CTX->Config.Is64BitMode ? 8 : 4;
 
   BlockSetRIP = true;
+
+  _InvalidateFlags();
+
   auto ConstantPC = _Constant(Op->PC + Op->InstSize);
 
   OrderedNode *JMPPCOffset = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);

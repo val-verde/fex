@@ -827,7 +827,7 @@ void OpDispatchBuilder::CondJUMPOp(OpcodeArgs) {
     default: LogMan::Msg::A("Unknown Jmp Op: 0x%x\n", Op->OP); return;
   }
 
-  if (cmpOp) {
+  if (flagsOp == 1) {
     //printf("%08X OP\n", Op->OP);
     if (Op->OP == 0x7F || Op->OP == 0x8F) {
       SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDest, cmpSrc, TakeBranch, DoNotTakeBranch, cmpSize);
@@ -861,6 +861,17 @@ void OpDispatchBuilder::CondJUMPOp(OpcodeArgs) {
       //printf("JCC NC OPT!\n");
     } else {
       //printf("JCC %04X OP\n", Op->OP);
+    }
+  }
+  else if (flagsOp == 2) {
+    if (Op->OP == 0x74 || Op->OP == 0x84) {
+      SrcCond = _Select(FEXCore::IR::COND_EQ, cmpDest, ZeroConst, TakeBranch, DoNotTakeBranch, cmpSize);
+      //printf("TST JCC EQ OPT!\n"); //JE -> ZF == 1 -> cmpDest == 0
+    }
+
+    if (Op->OP == 0x75 || Op->OP == 0x85) {
+      SrcCond = _Select(FEXCore::IR::COND_NEQ, cmpDest, ZeroConst, TakeBranch, DoNotTakeBranch, cmpSize);
+      //printf("TST JCC NE OPT!\n"); // JNE -> ZF == 0, cmpDest != 0
     }
   }
   LogMan::Throw::A(Op->Src[0].TypeNone.Type == FEXCore::X86Tables::DecodedOperand::TYPE_LITERAL, "Src1 needs to be literal here");
@@ -1259,6 +1270,14 @@ void OpDispatchBuilder::TESTOp(OpcodeArgs) {
 
   auto ALUOp = _And(Dest, Src);
   GenerateFlags_Logical(Op, ALUOp, Dest, Src);
+  
+  auto Size = GetDstSize(Op);
+  
+  if (Size >=4) {
+    flagsOp = 2;
+    cmpDest = ALUOp;
+    cmpSize = Size;
+  }
 }
 
 void OpDispatchBuilder::MOVSXDOp(OpcodeArgs) {
@@ -1323,7 +1342,7 @@ void OpDispatchBuilder::CMPOp(OpcodeArgs) {
   GenerateFlags_SUB(Op, Result, Dest, Src);
   if (Size >= 4) {
     cmpSize = Size;
-    cmpOp = true;
+    flagsOp = 1;
     cmpDest = Dest;
     cmpSrc = Src;
   }
@@ -1714,7 +1733,7 @@ void OpDispatchBuilder::CMOVOp(OpcodeArgs) {
     }
   }
 
-  if (cmpOp) {
+  if (flagsOp == 1) {
     if (Op->OP == 0x4F) {
       SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDest, cmpSrc, Src, Dest, cmpSize);
       //printf("SGT OPT!\n");
@@ -4983,11 +5002,11 @@ void OpDispatchBuilder::ResetWorkingList() {
 
 template<unsigned BitOffset>
 void OpDispatchBuilder::SetRFLAG(OrderedNode *Value) {
-  cmpOp = false;
+  flagsOp = 0;
   _StoreFlag(Value, BitOffset);
 }
 void OpDispatchBuilder::SetRFLAG(OrderedNode *Value, unsigned BitOffset) {
-  cmpOp = false;
+  flagsOp = 0;
   _StoreFlag(Value, BitOffset);
 }
 

@@ -1100,7 +1100,11 @@ DEF_OP(Sbfe) {
 DEF_OP(Select) {
   auto Op = IROp->C<IR::IROp_Select>();
 
-  cmp(GRCMP(Op->Header.Args[0].ID()), GRCMP(Op->Header.Args[1].ID()));
+  uint64_t Const;
+  if (IsInlineConstant(Op->Header.Args[1], &Const))
+    cmp(GRCMP(Op->Header.Args[0].ID()), Const);
+  else
+    cmp(GRCMP(Op->Header.Args[0].ID()), GRCMP(Op->Header.Args[1].ID()));
 
   switch (Op->Cond.Val) {
   case FEXCore::IR::COND_EQ:

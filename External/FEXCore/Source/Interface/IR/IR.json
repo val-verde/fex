@@ -93,6 +93,11 @@
       ]
     },
 
+    "InvalidateFlags": {
+      "OpClass": "Misc",
+      "HasSideEffects": true
+    },
+
     "EndBlock": {
       "HasSideEffects": true,
       "OpClass": "Misc",

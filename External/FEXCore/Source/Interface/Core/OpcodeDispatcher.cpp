@@ -1285,6 +1285,10 @@ void OpDispatchBuilder::CMPOp(OpcodeArgs) {
   }
 
   GenerateFlags_SUB(Op, Result, Dest, Src);
+
+  cmpOp = true;
+  cmpDest = Dest;
+  cmpSrc = Src;
 }
 
 void OpDispatchBuilder::CQOOp(OpcodeArgs) {
@@ -1669,6 +1673,16 @@ void OpDispatchBuilder::CMOVOp(OpcodeArgs) {
     }
 
     case COMPARE_OTHER: break;
+    }
+  }
+
+  if (cmpOp) {
+    if (Op->OP == 0x4F) {
+      SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDest, cmpSrc, Src, Dest);
+      printf("SGT OPT!\n");
+    } else if (Op->OP == 0x4E) {
+      SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDest, cmpSrc, Src, Dest);
+      printf("SLE OPT!\n");
     }
   }
 

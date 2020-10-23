@@ -105,11 +105,27 @@ bool ConstProp::Run(IREmitter *IREmit) {
   auto OriginalWriteCursor = IREmit->GetWriteCursor();
 
   auto HeaderOp = CurrentIR.GetHeader();
-  
 
-  for (auto [CodeNode, IROp] : CurrentIR.GetAllCode()) {
+  std::map<uint64_t, OrderedNode*> Consts;
+
+  for (auto [BlockNode, BlockHeader] : CurrentIR.GetBlocks()) {
+  // constants are pooled per block
+  Consts.clear();
+  for (auto [CodeNode, IROp] : CurrentIR.GetCode(BlockNode)) {
 
     switch (IROp->Op) {
+      case OP_CONSTANT: {
+        auto Op = IROp->C<IR::IROp_Constant>();
+        if (Consts.count(Op->Constant)) {
+          IREmit->ReplaceAllUsesWith(CodeNode, Consts[Op->Constant]);
+          Changed = true;
+        }
+        else {
+          Consts[Op->Constant] = CodeNode;
+        }
+        break;
+      }  
+
 /*
     case OP_UMUL:
     case OP_DIV:
@@ -341,6 +357,7 @@ bool ConstProp::Run(IREmitter *IREmit) {
     }
     default: break;
     }
+  }
   }
 
   if (!HeaderOp->ShouldInterpret && InlineConstants) {

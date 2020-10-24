@@ -362,7 +362,7 @@ bool ConstProp::Run(IREmitter *IREmit) {
       auto Op = IROp->CW<IR::IROp_CondJump>();
 
       auto Select = IREmit->GetOpHeader(Op->Header.Args[0]);
-      if (Select->Op == OP_SELECT && !HeaderOp->ShouldInterpret && InlineConstants) {
+      if (Select->Op == OP_SELECT && !HeaderOp->ShouldInterpret && InlineConstants && Op->Header.Args[1].IsInvalid()) {
         
         uint64_t Constant1;
         uint64_t Constant2;

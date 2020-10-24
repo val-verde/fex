@@ -69,8 +69,7 @@ DEF_OP(Jump) {
   else {
     TargetLabel = &IsTarget->second;
   }
-
-  b(TargetLabel);
+  PendingTargetLabel = TargetLabel;
 }
 
 #define GRCMP(Node) (Op->CompareSize == 4 ? GetReg<RA_32>(Node) : GetReg<RA_64>(Node))
@@ -150,13 +149,11 @@ DEF_OP(CondJump) {
   
   if (FalseIter == JumpTargets.end()) {
     FalseTargetLabel = &JumpTargets.try_emplace(Op->Header.Args[4].ID()).first->second;
-    PendingTargetLabel = FalseTargetLabel;
   }
   else {
     FalseTargetLabel = &FalseIter->second;
-    b(FalseTargetLabel);
   }
-
+  PendingTargetLabel = FalseTargetLabel;
 }
 
 DEF_OP(Syscall) {

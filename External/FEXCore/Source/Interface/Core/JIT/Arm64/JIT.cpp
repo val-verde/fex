@@ -672,6 +672,13 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
     }
   }
 
+  // Make sure last branch is generated. It certainly can't be eliminated here.
+  if (PendingTargetLabel)
+  {
+    b(PendingTargetLabel);
+  }
+  PendingTargetLabel = nullptr;
+
   FinalizeCode();
 
   auto CodeEnd = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());

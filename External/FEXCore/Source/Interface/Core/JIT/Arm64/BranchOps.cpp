@@ -95,7 +95,13 @@ DEF_OP(CondJump) {
     cbnz(GetReg<RA_64>(Op->Header.Args[0].ID()), TrueTargetLabel);
   } else {
       uint64_t Const;
-      if (IsInlineConstant(Op->Header.Args[1], &Const))
+      bool isConst = IsInlineConstant(Op->Header.Args[1], &Const);
+      if (isConst && Const == 0 && Op->Operation.Val == FEXCore::IR::COND_EQ) {
+        cbz(GRCMP(Op->Header.Args[0].ID()), TrueTargetLabel);
+      } else if (isConst && Const == 0 && Op->Operation.Val == FEXCore::IR::COND_NEQ) {
+        cbnz(GRCMP(Op->Header.Args[0].ID()), TrueTargetLabel);
+      } else {
+      if (isConst)
         cmp(GRCMP(Op->Header.Args[0].ID()), Const);
       else
         cmp(GRCMP(Op->Header.Args[0].ID()), GRCMP(Op->Header.Args[1].ID()));
@@ -138,6 +144,7 @@ DEF_OP(CondJump) {
       default:
       LogMan::Msg::A("Unsupported compare type");
       break;
+      }
       }
   }
   

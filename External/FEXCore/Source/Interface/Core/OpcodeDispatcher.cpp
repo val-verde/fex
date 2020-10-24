@@ -5403,14 +5403,19 @@ void OpDispatchBuilder::GenerateFlags_Logical(FEXCore::X86Tables::DecodedOp Op, 
   }
 }
 
+#define COND_FLAG_SET(cond, flag, newflag) \
+auto oldflag = GetRFLAG(FEXCore::X86State::flag);\
+auto newval = _Select(FEXCore::IR::COND_EQ, cond, _Constant(0), oldflag, newflag);\
+SetRFLAG<FEXCore::X86State::flag>(newval);
+
 void OpDispatchBuilder::GenerateFlags_ShiftLeft(FEXCore::X86Tables::DecodedOp Op, OrderedNode *Res, OrderedNode *Src1, OrderedNode *Src2) {
-  auto CmpResult = _Select(FEXCore::IR::COND_EQ, Src2, _Constant(0), _Constant(1), _Constant(0));
-  auto CondJump = _CondJump(CmpResult);
+  //auto CmpResult = _Select(FEXCore::IR::COND_EQ, Src2, _Constant(0), _Constant(1), _Constant(0));
+  //auto CondJump = _CondJump(CmpResult);
 
   // Make sure to start a new block after ending this one
-  auto JumpTarget = CreateNewCodeBlock();
-  SetFalseJumpTarget(CondJump, JumpTarget);
-  SetCurrentCodeBlock(JumpTarget);
+  //auto JumpTarget = CreateNewCodeBlock();
+  //SetFalseJumpTarget(CondJump, JumpTarget);
+  //SetCurrentCodeBlock(JumpTarget);
 
   // CF
   {
@@ -5418,7 +5423,8 @@ void OpDispatchBuilder::GenerateFlags_ShiftLeft(FEXCore::X86Tables::DecodedOp Op
     auto Size = _Constant(GetSrcSize(Op) * 8);
     auto ShiftAmt = _Sub(Size, Src2);
     auto LastBit = _And(_Lshr(Src1, ShiftAmt), _Constant(1));
-    SetRFLAG<FEXCore::X86State::RFLAG_CF_LOC>(LastBit);
+    //SetRFLAG<FEXCore::X86State::RFLAG_CF_LOC>(LastBit);
+    COND_FLAG_SET(Src2, RFLAG_CF_LOC, LastBit);
   }
 
   // PF
@@ -5433,50 +5439,58 @@ void OpDispatchBuilder::GenerateFlags_ShiftLeft(FEXCore::X86Tables::DecodedOp Op
   {
     // Undefined
     // Set to zero anyway
-    SetRFLAG<FEXCore::X86State::RFLAG_AF_LOC>(_Constant(0));
+    //SetRFLAG<FEXCore::X86State::RFLAG_AF_LOC>(_Constant(0));
+    COND_FLAG_SET(Src2, RFLAG_AF_LOC, _Constant(0));
   }
 
   // ZF
   {
     auto SelectOp = _Select(FEXCore::IR::COND_EQ,
         Res, _Constant(0), _Constant(1), _Constant(0));
-    SetRFLAG<FEXCore::X86State::RFLAG_ZF_LOC>(SelectOp);
+    //SetRFLAG<FEXCore::X86State::RFLAG_ZF_LOC>(SelectOp);
+    COND_FLAG_SET(Src2, RFLAG_ZF_LOC, SelectOp);
   }
 
   // SF
   {
-    SetRFLAG<FEXCore::X86State::RFLAG_SF_LOC>(_Bfe(1, GetSrcSize(Op) * 8 - 1, Res));
+    auto val = _Bfe(1, GetSrcSize(Op) * 8 - 1, Res);
+    //SetRFLAG<FEXCore::X86State::RFLAG_SF_LOC>(val);
+    COND_FLAG_SET(Src2, RFLAG_SF_LOC, val);
   }
 
   // OF
   {
     // In the case of left shift. OF is only set from the result of <Top Source Bit> XOR <Top Result Bit>
     // When Shift > 1 then OF is undefined
-    SetRFLAG<FEXCore::X86State::RFLAG_OF_LOC>(_Bfe(1, GetSrcSize(Op) * 8 - 1, _Xor(Src1, Res)));
+    auto val = _Bfe(1, GetSrcSize(Op) * 8 - 1, _Xor(Src1, Res));
+
+    //SetRFLAG<FEXCore::X86State::RFLAG_OF_LOC>(val);
+    COND_FLAG_SET(Src2, RFLAG_OF_LOC, val);
   }
 
-  auto Jump = _Jump();
-  auto NextJumpTarget = CreateNewCodeBlock();
-  SetJumpTarget(Jump, NextJumpTarget);
-  SetTrueJumpTarget(CondJump, NextJumpTarget);
-  SetCurrentCodeBlock(NextJumpTarget);
+  //auto Jump = _Jump();
+  //auto NextJumpTarget = CreateNewCodeBlock();
+  //SetJumpTarget(Jump, NextJumpTarget);
+  //SetTrueJumpTarget(CondJump, NextJumpTarget);
+  //SetCurrentCodeBlock(NextJumpTarget);
 }
 
 void OpDispatchBuilder::GenerateFlags_ShiftRight(FEXCore::X86Tables::DecodedOp Op, OrderedNode *Res, OrderedNode *Src1, OrderedNode *Src2) {
-  auto CmpResult = _Select(FEXCore::IR::COND_EQ, Src2, _Constant(0), _Constant(1), _Constant(0));
-  auto CondJump = _CondJump(CmpResult);
+  //auto CmpResult = _Select(FEXCore::IR::COND_EQ, Src2, _Constant(0), _Constant(1), _Constant(0));
+  //auto CondJump = _CondJump(CmpResult);
 
   // Make sure to start a new block after ending this one
-  auto JumpTarget = CreateNewCodeBlock();
-  SetFalseJumpTarget(CondJump, JumpTarget);
-  SetCurrentCodeBlock(JumpTarget);
+  //auto JumpTarget = CreateNewCodeBlock();
+  //SetFalseJumpTarget(CondJump, JumpTarget);
+  //SetCurrentCodeBlock(JumpTarget);
 
   // CF
   {
     // Extract the last bit shifted in to CF
     auto ShiftAmt = _Sub(Src2, _Constant(1));
     auto LastBit = _And(_Lshr(Src1, ShiftAmt), _Constant(1));
-    SetRFLAG<FEXCore::X86State::RFLAG_CF_LOC>(LastBit);
+    //SetRFLAG<FEXCore::X86State::RFLAG_CF_LOC>(LastBit);
+    COND_FLAG_SET(Src2, RFLAG_CF_LOC, LastBit);
   }
 
   // PF
@@ -5491,51 +5505,57 @@ void OpDispatchBuilder::GenerateFlags_ShiftRight(FEXCore::X86Tables::DecodedOp O
   {
     // Undefined
     // Set to zero anyway
-    SetRFLAG<FEXCore::X86State::RFLAG_AF_LOC>(_Constant(0));
+    //SetRFLAG<FEXCore::X86State::RFLAG_AF_LOC>(_Constant(0));
+    COND_FLAG_SET(Src2, RFLAG_AF_LOC, _Constant(0));
   }
 
   // ZF
   {
     auto SelectOp = _Select(FEXCore::IR::COND_EQ,
         Res, _Constant(0), _Constant(1), _Constant(0));
-    SetRFLAG<FEXCore::X86State::RFLAG_ZF_LOC>(SelectOp);
+    //SetRFLAG<FEXCore::X86State::RFLAG_ZF_LOC>(SelectOp);
+    COND_FLAG_SET(Src2, RFLAG_ZF_LOC, SelectOp);
   }
 
   // SF
   {
-    SetRFLAG<FEXCore::X86State::RFLAG_SF_LOC>(_Bfe(1, GetSrcSize(Op) * 8 - 1, Res));
+    auto val =_Bfe(1, GetSrcSize(Op) * 8 - 1, Res);
+    //SetRFLAG<FEXCore::X86State::RFLAG_SF_LOC>(val);
+    COND_FLAG_SET(Src2, RFLAG_SF_LOC, val);
   }
 
   // OF
   {
     // Only defined when Shift is 1 else undefined
     // OF flag is set if a sign change occurred
-
-    SetRFLAG<FEXCore::X86State::RFLAG_OF_LOC>(_Bfe(1, GetSrcSize(Op) * 8 - 1, _Xor(Src1, Res)));
+    auto val = _Bfe(1, GetSrcSize(Op) * 8 - 1, _Xor(Src1, Res));
+    //SetRFLAG<FEXCore::X86State::RFLAG_OF_LOC>(val);
+    COND_FLAG_SET(Src2, RFLAG_OF_LOC, val);
   }
 
-  auto Jump = _Jump();
-  auto NextJumpTarget = CreateNewCodeBlock();
-  SetJumpTarget(Jump, NextJumpTarget);
-  SetTrueJumpTarget(CondJump, NextJumpTarget);
-  SetCurrentCodeBlock(NextJumpTarget);
+  //auto Jump = _Jump();
+  ///auto NextJumpTarget = CreateNewCodeBlock();
+  //SetJumpTarget(Jump, NextJumpTarget);
+  //SetTrueJumpTarget(CondJump, NextJumpTarget);
+  //SetCurrentCodeBlock(NextJumpTarget);
 }
 
 void OpDispatchBuilder::GenerateFlags_SignShiftRight(FEXCore::X86Tables::DecodedOp Op, OrderedNode *Res, OrderedNode *Src1, OrderedNode *Src2) {
-  auto CmpResult = _Select(FEXCore::IR::COND_EQ, Src2, _Constant(0), _Constant(1), _Constant(0));
-  auto CondJump = _CondJump(CmpResult);
+  //auto CmpResult = _Select(FEXCore::IR::COND_EQ, Src2, _Constant(0), _Constant(1), _Constant(0));
+  //auto CondJump = _CondJump(CmpResult);
 
   // Make sure to start a new block after ending this one
-  auto JumpTarget = CreateNewCodeBlock();
-  SetFalseJumpTarget(CondJump, JumpTarget);
-  SetCurrentCodeBlock(JumpTarget);
+  //auto JumpTarget = CreateNewCodeBlock();
+  //SetFalseJumpTarget(CondJump, JumpTarget);
+  //SetCurrentCodeBlock(JumpTarget);
 
   // CF
   {
     // Extract the last bit shifted in to CF
     auto ShiftAmt = _Sub(Src2, _Constant(1));
     auto LastBit = _And(_Lshr(Src1, ShiftAmt), _Constant(1));
-    SetRFLAG<FEXCore::X86State::RFLAG_CF_LOC>(LastBit);
+    //SetRFLAG<FEXCore::X86State::RFLAG_CF_LOC>(LastBit);
+    COND_FLAG_SET(Src2, RFLAG_CF_LOC, LastBit);
   }
 
   // PF
@@ -5550,14 +5570,16 @@ void OpDispatchBuilder::GenerateFlags_SignShiftRight(FEXCore::X86Tables::Decoded
   {
     // Undefined
     // Set to zero anyway
-    SetRFLAG<FEXCore::X86State::RFLAG_AF_LOC>(_Constant(0));
+    //SetRFLAG<FEXCore::X86State::RFLAG_AF_LOC>(_Constant(0));
+    COND_FLAG_SET(Src2, RFLAG_AF_LOC, _Constant(0));
   }
 
   // ZF
   {
     auto SelectOp = _Select(FEXCore::IR::COND_EQ,
         Res, _Constant(0), _Constant(1), _Constant(0));
-    SetRFLAG<FEXCore::X86State::RFLAG_ZF_LOC>(SelectOp);
+   // SetRFLAG<FEXCore::X86State::RFLAG_ZF_LOC>(SelectOp);
+    COND_FLAG_SET(Src2, RFLAG_ZF_LOC, SelectOp);
   }
 
   // SF
@@ -5565,19 +5587,21 @@ void OpDispatchBuilder::GenerateFlags_SignShiftRight(FEXCore::X86Tables::Decoded
     auto SignBitConst = _Constant(GetSrcSize(Op) * 8 - 1);
 
     auto LshrOp = _Lshr(Res, SignBitConst);
-    SetRFLAG<FEXCore::X86State::RFLAG_SF_LOC>(LshrOp);
+    //SetRFLAG<FEXCore::X86State::RFLAG_SF_LOC>(LshrOp);
+    COND_FLAG_SET(Src2, RFLAG_SF_LOC, LshrOp);
   }
 
   // OF
   {
-    SetRFLAG<FEXCore::X86State::RFLAG_OF_LOC>(_Constant(0));
+    //SetRFLAG<FEXCore::X86State::RFLAG_OF_LOC>(_Constant(0));
+    COND_FLAG_SET(Src2, RFLAG_OF_LOC, _Constant(0));
   }
 
-  auto Jump = _Jump();
-  auto NextJumpTarget = CreateNewCodeBlock();
-  SetJumpTarget(Jump, NextJumpTarget);
-  SetTrueJumpTarget(CondJump, NextJumpTarget);
-  SetCurrentCodeBlock(NextJumpTarget);
+  //auto Jump = _Jump();
+  //auto NextJumpTarget = CreateNewCodeBlock();
+  //SetJumpTarget(Jump, NextJumpTarget);
+  //SetTrueJumpTarget(CondJump, NextJumpTarget);
+  //SetCurrentCodeBlock(NextJumpTarget);
 }
 
 void OpDispatchBuilder::GenerateFlags_ShiftLeftImmediate(FEXCore::X86Tables::DecodedOp Op, OrderedNode *Res, OrderedNode *Src1, uint64_t Shift) {

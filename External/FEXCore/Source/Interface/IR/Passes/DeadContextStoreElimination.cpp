@@ -485,8 +485,27 @@ bool RCLSE::RedundantStoreLoadElimination(FEXCore::IR::IREmitter *IREmit) {
             Changed = true;
           } else {
             if (LastClass == FPRClass && LastSize == IROp->Size && LastSize == IREmit->GetOpSize(LastNode)) {
+              // LoadCtx matches StoreCtx and Node Size
               IREmit->ReplaceAllUsesWith(CodeNode, LastNode);
               RecordAccess(Info, Op->Class, Op->Offset, IROp->Size, ACCESS_READ, LastNode);
+            } else if (LastClass == FPRClass && LastSize >= IROp->Size && IROp->Size == IREmit->GetOpSize(LastNode)) {
+              // LoadCtx is <= StoreCtx and Node is LoadCtx
+              IREmit->ReplaceAllUsesWith(CodeNode, LastNode);
+              RecordAccess(Info, Op->Class, Op->Offset, IROp->Size, ACCESS_READ, LastNode);
+            } else if (LastClass == FPRClass && LastSize >= IROp->Size && IROp->Size < IREmit->GetOpSize(LastNode)) {
+
+              // trucate to size
+              //LastNode = IREmit->_VMov(LastNode, IROp->Size);
+
+              //IREmit->ReplaceAllUsesWith(CodeNode, LastNode);
+              //RecordAccess(Info, Op->Class, Op->Offset, IROp->Size, ACCESS_READ, LastNode);
+            } else if (LastClass == FPRClass && LastSize >= IROp->Size && IROp->Size > IREmit->GetOpSize(LastNode)) {
+
+              // zext to size
+              //LastNode = IREmit->_VMov(LastNode, IROp->Size);
+
+              //IREmit->ReplaceAllUsesWith(CodeNode, LastNode);
+              //RecordAccess(Info, Op->Class, Op->Offset, IROp->Size, ACCESS_READ, LastNode);
             } else {
               printf("Not GPR class, missed, %d, lastS: %d, S: %d, Node S: %d\n", LastClass, LastSize, IROp->Size, IREmit->GetOpSize(LastNode));
             }

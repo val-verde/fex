@@ -709,11 +709,25 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   AbsoluteLoopTopAddress = getCurr<uint64_t>();
 
   {
-    mov(r13, Thread->BlockCache->GetPagePointer());
-
     // Load our RIP
     mov(rdx, qword [STATE + offsetof(FEXCore::Core::CPUState, rip)]);
+    Label FullLookup;
 
+    // L1 Cache
+    mov(r13, Thread->BlockCache->GetL1Pointer());
+    mov(rax, rdx);
+    and_(rax, 1 * 1024 * 1024 - 1);
+    shl(rax, 1);
+    cmp(qword[r13 + rax*8 + 0], rdx);
+    jne(FullLookup);
+    call(qword[r13 + rax*8 + 8]);
+    jmp(LoopTop);
+    
+    L(FullLookup);
+     
+    mov(r13, Thread->BlockCache->GetPagePointer());
+
+    // Full lookup
     mov(rax, rdx);
     mov(rbx, Thread->BlockCache->GetVirtualMemorySize() - 1);
     and_(rax, rbx);
@@ -741,6 +755,14 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     cmp(rax, 0);
     je(NoBlock);
 
+    // Update L1
+    mov(r13, Thread->BlockCache->GetL1Pointer());
+    mov(rcx, rdx);
+    and_(rcx, 1 * 1024 * 1024 - 1);
+    shl(rcx, 1);
+    mov(qword[r13 + rcx*8 + 0], rdx);
+    mov(qword[r13 + rcx*8 + 8], rax);
+    
     // Real block if we made it here
     call(rax);
 

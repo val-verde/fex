@@ -633,13 +633,9 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
   auto Entry = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
 
   if (SpillSlots) {
-    add(TMP1, sp, 0); // Move that supports SP
+    //add(TMP1, sp, 0); // Move that supports SP
     sub(sp, sp, SpillSlots * 16);
-    stp(TMP1, lr, MemOperand(sp, -16, PreIndex));
-  }
-  else {
-    add(TMP1, sp, 0); // Move that supports SP
-    stp(TMP1, lr, MemOperand(sp, -16, PreIndex));
+    //stp(TMP1, lr, MemOperand(sp, -16, PreIndex));
   }
 
   PendingTargetLabel = nullptr;
@@ -865,14 +861,27 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   bind(&LoopTop);
   AbsoluteLoopTopAddress = GetLabelAddress<uint64_t>(&LoopTop);
 
-  // This is the block cache lookup routine
-  // It matches what is going on it BlockCache.h::FindBlock
-  ldr(x0, &l_PagePtr);
-
   // Load in our RIP
   // Don't modify x2 since it contains our RIP once the block doesn't exist
   ldr(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
   auto RipReg = x2;
+
+  // L1 Cache
+  LoadConstant(x0, Thread->BlockCache->GetL1Pointer());
+
+  and_(x3, RipReg, 1 * 1024 * 1024 - 1);
+  add(x0, x0, Operand(x3, Shift::LSL, 4));
+  ldp(x0, x1, MemOperand(x0));
+  cmp(x0, RipReg);
+  b(&FullLookup, Condition::ne);
+  br(x1);
+  
+  bind(&FullLookup);
+  AbsoluteFullLookupAddress = GetLabelAddress<uint64_t>(&FullLookup);
+
+  // This is the block cache lookup routine
+  // It matches what is going on it BlockCache.h::FindBlock
+  ldr(x0, &l_PagePtr);
 
   // Mask the address by the virtual address size so we can check for aliases
   if (__builtin_popcountl(VirtualMemorySize) == 1) {
@@ -912,7 +921,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
 
     // If we've made it here then we have a real compiled block
     {
-      blr(x0);
+      br(x0);
     }
 
     if (CTX->GetGdbServerStatus()) {

@@ -21,8 +21,9 @@ DEF_OP(GuestReturn) {
 
 DEF_OP(SignalReturn) {
   // First we must reset the stack
-  ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
-  add(sp, TMP1, 0); // Move that supports SP
+  //ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
+  //add(sp, TMP1, 0); // Move that supports SP
+  add(sp, sp, SpillSlots * 16);
 
   // Now branch to our signal return helper
   // This can't be a direct branch since the code needs to live at a constant location
@@ -32,8 +33,11 @@ DEF_OP(SignalReturn) {
 
 DEF_OP(CallbackReturn) {
   // First we must reset the stack
-  ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
-  add(sp, TMP1, 0); // Move that supports SP
+
+  //TODO: FIXME
+  //ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
+  //add(sp, TMP1, 0); // Move that supports SP
+  add(sp, sp, SpillSlots * 16);
 
   // We can now lower the ref counter again
   LoadConstant(x0, reinterpret_cast<uint64_t>(&SignalHandlerRefCounter));
@@ -53,9 +57,12 @@ DEF_OP(CallbackReturn) {
 }
 
 DEF_OP(ExitFunction) {
-  ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
-  add(sp, TMP1, 0); // Move that supports SP
-  ret();
+  add(sp, sp, SpillSlots * 16);
+  //ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
+  //add(sp, TMP1, 0); // Move that supports SP
+  //ret();
+  LoadConstant(x0, AbsoluteLoopTopAddress);
+  br(x0);
 }
 
 DEF_OP(Jump) {

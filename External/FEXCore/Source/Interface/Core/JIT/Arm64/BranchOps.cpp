@@ -73,27 +73,52 @@ DEF_OP(ExitFunction) {
 
   aarch64::Label FullLookup;
 
-  auto RipReg = GetReg<RA_64>(Op->Header.Args[0].ID());
+  uint64_t Const;
+  bool isConst = IsInlineConstant(Op->Header.Args[0], &Const);
 
-  //LoadConstant(x2, 0xDEADBEEF00);
-  //str(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
-  
-  //str(RipReg, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
+  if (isConst) {
+    //LoadConstant(x2, 0xDEADBEEF00);
+    //str(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
+    auto RipReg = x2;
 
-  // L1 Cache
-  LoadConstant(x0, State->BlockCache->GetL1Pointer());
+    //str(RipReg, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
 
-  and_(x3, RipReg, 1 * 1024 * 1024 - 1);
-  add(x0, x0, Operand(x3, Shift::LSL, 4));
-  ldp(x1, x0, MemOperand(x0));
-  cmp(x0, RipReg);
-  b(&FullLookup, Condition::ne);
-  br(x1);
+    auto L1Ptr = State->BlockCache->GetL1Pointer() + (Const & (1024 * 1024 - 1)) * 16;
+    // L1 Cache
+    LoadConstant(x0, L1Ptr);
+    ldp(x0, x1, MemOperand(x0));
+    LoadConstant(RipReg, Const);
+    cmp(x0, RipReg);
+    b(&FullLookup, Condition::ne);
+    br(x1);
 
-  bind(&FullLookup);
-  mov(x2, RipReg);
-  LoadConstant(x0, AbsoluteFullLookupAddress);
-  br(x0);
+    bind(&FullLookup);
+    LoadConstant(x0, AbsoluteFullLookupAddress);
+    br(x0);
+  }
+  else {
+    auto RipReg = GetReg<RA_64>(Op->Header.Args[0].ID());
+
+    //LoadConstant(x2, 0xDEADBEEF00);
+    //str(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
+
+    //str(RipReg, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
+
+    // L1 Cache
+    LoadConstant(x0, State->BlockCache->GetL1Pointer());
+
+    and_(x3, RipReg, 1 * 1024 * 1024 - 1);
+    add(x0, x0, Operand(x3, Shift::LSL, 4));
+    ldp(x1, x0, MemOperand(x0));
+    cmp(x0, RipReg);
+    b(&FullLookup, Condition::ne);
+    br(x1);
+
+    bind(&FullLookup);
+    mov(x2, RipReg);
+    LoadConstant(x0, AbsoluteFullLookupAddress);
+    br(x0);
+  }
 }
 
 DEF_OP(Jump) {

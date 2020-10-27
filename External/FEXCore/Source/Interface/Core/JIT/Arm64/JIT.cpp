@@ -787,6 +787,22 @@ void JITCore::PopCalleeSavedRegisters() {
   }
 }
 
+uint64_t JITCore::ExitFunctionLink(JITCore *core, FEXCore::Core::InternalThreadState *Thread, uint64_t *record) {
+  auto GuestRip = record[1];
+
+  auto HostCode = Thread->BlockCache->FindBlock(GuestRip);
+
+  if (!HostCode) {
+    //printf("ExitFunctionLink: Aborting, %lX not in cache\n", GuestRip);
+    Thread->State.State.rip = GuestRip;
+    return core->AbsoluteLoopTopAddress;
+  }
+
+  //printf("ExitFunctionLink: %lX -> %lX, linked\n", GuestRip, HostCode);
+  record[0] = HostCode;
+  return HostCode;
+}
+
 void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   auto OriginalBuffer = *GetBuffer();
 
@@ -851,6 +867,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
 
   Literal l_CompileBlock {CompileBlockPtr};
   Literal l_CompileFallback {CompileFallbackPtr};
+  Literal l_ExitFunctionLink {(uintptr_t)&ExitFunctionLink};
 
   // Push all the register we need to save
   PushCalleeSavedRegisters();
@@ -974,6 +991,18 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     // Return from the function
     // LR is set to the correct return location now
     ret();
+  }
+
+  {
+    bind(&ExitFunctionLinker);
+    ExitFunctionLinkerAddress = GetLabelAddress<uint64_t>(&ExitFunctionLinker);
+    LoadConstant(x0, (uintptr_t)this);
+    mov(x1, STATE);
+    mov(x2, lr);
+    
+    ldr(x3, &l_ExitFunctionLink);
+    blr(x3);
+    br(x0);
   }
 
   aarch64::Label FallbackCore;
@@ -1111,6 +1140,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   place(&l_Sleep);
   place(&l_CompileBlock);
   place(&l_CompileFallback);
+  place(&l_ExitFunctionLink);
 
   FinalizeCode();
   uint64_t CodeEnd = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());

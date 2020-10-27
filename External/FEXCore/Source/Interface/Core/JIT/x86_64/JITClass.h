@@ -148,6 +148,7 @@ private:
   CodeBuffer *CurrentCodeBuffer{};
 
   uint64_t AbsoluteLoopTopAddress{};
+  uint64_t AbsoluteFullLookupAddress{};
   uint64_t ThreadStopHandlerAddress{};
   uint64_t ThreadPauseHandlerAddress{};
   Label ThreadPauseHandler{};

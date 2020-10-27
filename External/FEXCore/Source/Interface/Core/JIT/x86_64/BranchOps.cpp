@@ -20,10 +20,7 @@ DEF_OP(GuestReturn) {
 DEF_OP(SignalReturn) {
   // Adjust the stack first for a regular return
   if (SpillSlots) {
-    add(rsp, SpillSlots * 16 + 8 + 8); // + 8 to consume return address
-  }
-  else {
-    add(rsp, 8 + 8); // + 8 to consume return address
+    add(rsp, SpillSlots * 16);
   }
 
   mov(TMP1, SignalHandlerReturnAddress);
@@ -33,10 +30,7 @@ DEF_OP(SignalReturn) {
 DEF_OP(CallbackReturn) {
   // Adjust the stack first for a regular return
   if (SpillSlots) {
-    add(rsp, SpillSlots * 16 + 8 + 8); // + 8 to consume return address
-  }
-  else {
-    add(rsp, 8 + 8); // + 8 to consume return address
+    add(rsp, SpillSlots * 16);
   }
 
   // Make sure to adjust the refcounter so we don't clear the cache now
@@ -62,16 +56,32 @@ DEF_OP(CallbackReturn) {
 
 DEF_OP(ExitFunction) {
   if (SpillSlots) {
-    add(rsp, SpillSlots * 16 + 8);
-  }
-  else {
-    add(rsp, 8);
+    add(rsp, SpillSlots * 16);
   }
 
 #ifdef BLOCKSTATS
   ExitBlock();
 #endif
-  ret();
+  
+  Label FullLookup;
+
+  // Load our RIP
+  mov(rdx, qword [STATE + offsetof(FEXCore::Core::CPUState, rip)]);
+
+  // L1 Cache
+  mov(r13, ThreadState->BlockCache->GetL1Pointer());
+  mov(rax, rdx);
+
+  and_(rax, 1 * 1024 * 1024 - 1);
+  shl(rax, 1);
+  cmp(qword[r13 + rax*8 + 0], rdx);
+  jne(FullLookup);
+  jmp(qword[r13 + rax*8 + 8]);
+  
+  // TODO: Pools + local jumps
+  L(FullLookup);
+  mov(TMP1, AbsoluteFullLookupAddress);
+  jmp(TMP1);
 }
 
 DEF_OP(Jump) {

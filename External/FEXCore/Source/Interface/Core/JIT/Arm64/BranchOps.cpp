@@ -61,6 +61,23 @@ DEF_OP(ExitFunction) {
   //ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
   //add(sp, TMP1, 0); // Move that supports SP
   //ret();
+
+  aarch64::Label FullLookup;
+
+  ldr(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
+  auto RipReg = x2;
+
+  // L1 Cache
+  LoadConstant(x0, State->BlockCache->GetL1Pointer());
+
+  and_(x3, RipReg, 1 * 1024 * 1024 - 1);
+  add(x0, x0, Operand(x3, Shift::LSL, 4));
+  ldp(x0, x1, MemOperand(x0));
+  cmp(x0, RipReg);
+  b(&FullLookup, Condition::ne);
+  br(x1);
+
+  bind(&FullLookup);
   LoadConstant(x0, AbsoluteLoopTopAddress);
   br(x0);
 }

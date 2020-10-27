@@ -916,12 +916,18 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     b(&NoBlock, Condition::ne);
 
     // Now load the actual host block to execute if we can
-    ldr(x0, MemOperand(x0, offsetof(FEXCore::BlockCache::BlockCacheEntry, HostCode)));
-    cbz(x0, &NoBlock);
+    ldr(x3, MemOperand(x0, offsetof(FEXCore::BlockCache::BlockCacheEntry, HostCode)));
+    cbz(x3, &NoBlock);
 
     // If we've made it here then we have a real compiled block
     {
-      br(x0);
+      // update L1 cache
+      LoadConstant(x0, Thread->BlockCache->GetL1Pointer());
+
+      and_(x1, RipReg, 1 * 1024 * 1024 - 1);
+      add(x0, x0, Operand(x1, Shift::LSL, 4));
+      stp(x2, x3, MemOperand(x0));
+      br(x3);
     }
 
     if (CTX->GetGdbServerStatus()) {

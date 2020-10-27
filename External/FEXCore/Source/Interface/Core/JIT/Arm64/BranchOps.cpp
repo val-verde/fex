@@ -70,24 +70,14 @@ DEF_OP(ExitFunction) {
   bool isConst = IsInlineConstant(Op->Header.Args[0], &Const);
 
   if (isConst) {
-    //LoadConstant(x2, 0xDEADBEEF00);
-    //str(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
-    auto RipReg = x2;
+    Literal l_BranchHost{ExitFunctionLinkerAddress};
+    Literal l_BranchGuest{Const};
 
-    //str(RipReg, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
-
-    auto L1Ptr = State->BlockCache->GetL1Pointer() + (Const & (1024 * 1024 - 1)) * 16;
-    // L1 Cache
-    LoadConstant(x0, L1Ptr);
-    ldp(x0, x1, MemOperand(x0));
-    LoadConstant(RipReg, Const);
-    cmp(x0, RipReg);
-    b(&FullLookup, Condition::ne);
-    br(x1);
-
-    bind(&FullLookup);
-    LoadConstant(x0, AbsoluteFullLookupAddress);
-    br(x0);
+    ldr(x0, &l_BranchHost);
+    blr(x0);
+    
+    place(&l_BranchHost);
+    place(&l_BranchGuest);
   }
   else {
     auto RipReg = GetReg<RA_64>(Op->Header.Args[0].ID());

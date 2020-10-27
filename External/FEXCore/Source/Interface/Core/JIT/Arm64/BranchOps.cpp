@@ -23,7 +23,9 @@ DEF_OP(SignalReturn) {
   // First we must reset the stack
   //ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
   //add(sp, TMP1, 0); // Move that supports SP
-  add(sp, sp, SpillSlots * 16);
+  if (SpillSlots) {
+    add(sp, sp, SpillSlots * 16);
+  }
 
   // Now branch to our signal return helper
   // This can't be a direct branch since the code needs to live at a constant location
@@ -37,8 +39,10 @@ DEF_OP(CallbackReturn) {
   //TODO: FIXME
   //ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
   //add(sp, TMP1, 0); // Move that supports SP
-  add(sp, sp, SpillSlots * 16);
-
+  if (SpillSlots) {
+    add(sp, sp, SpillSlots * 16);
+  }
+  
   // We can now lower the ref counter again
   LoadConstant(x0, reinterpret_cast<uint64_t>(&SignalHandlerRefCounter));
   ldr(w2, MemOperand(x0));
@@ -59,7 +63,9 @@ DEF_OP(CallbackReturn) {
 DEF_OP(ExitFunction) {
   auto Op = IROp->C<IR::IROp_ExitFunction>();
 
-  add(sp, sp, SpillSlots * 16);
+  if (SpillSlots) {
+    add(sp, sp, SpillSlots * 16);
+  }
   //ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
   //add(sp, TMP1, 0); // Move that supports SP
   //ret();

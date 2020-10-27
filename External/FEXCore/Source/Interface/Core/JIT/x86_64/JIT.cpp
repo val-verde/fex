@@ -502,10 +502,7 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
   SpillSlots = RAPass->SpillSlots();
 
   if (SpillSlots) {
-    sub(rsp, SpillSlots * 16 + 8);
-  }
-  else {
-    sub(rsp, 8);
+    sub(rsp, SpillSlots * 16);
   }
 
 #ifdef BLOCKSTATS
@@ -688,27 +685,28 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
 
   Label LoopTop;
   Label NoBlock;
+  Label FullLookup;
 
   L(LoopTop);
   AbsoluteLoopTopAddress = getCurr<uint64_t>();
-
   {
     // Load our RIP
     mov(rdx, qword [STATE + offsetof(FEXCore::Core::CPUState, rip)]);
-    Label FullLookup;
 
     // L1 Cache
     mov(r13, Thread->BlockCache->GetL1Pointer());
     mov(rax, rdx);
+
     and_(rax, 1 * 1024 * 1024 - 1);
     shl(rax, 1);
     cmp(qword[r13 + rax*8 + 0], rdx);
     jne(FullLookup);
-    call(qword[r13 + rax*8 + 8]);
+    jmp(qword[r13 + rax*8 + 8]);
     jmp(LoopTop);
     
     L(FullLookup);
-     
+    AbsoluteFullLookupAddress = getCurr<uint64_t>();
+    
     mov(r13, Thread->BlockCache->GetPagePointer());
 
     // Full lookup
@@ -748,7 +746,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     mov(qword[r13 + rcx*8 + 8], rax);
     
     // Real block if we made it here
-    call(rax);
+    jmp(rax);
 
     if (CTX->GetGdbServerStatus()) {
       // If we have a gdb server running then run in a less efficient mode that checks if we need to exit
@@ -819,16 +817,11 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   {
     // Interpreter fallback helper code
     InterpreterFallbackHelperAddress = getCurr<void*>();
-    // This will get called so our stack is now misaligned
-    sub(rsp, 8);
+    
     mov(rdi, STATE);
     mov(rax, reinterpret_cast<uint64_t>(ThreadState->IntBackend->CompileCode(nullptr, nullptr)));
 
     call(rax);
-
-    // Adjust the stack to remove the alignment and also the return address
-    // We will have been called from the ASM dispatcher, so we know where we came from
-    add(rsp, 16);
 
     jmp(LoopTop);
   }

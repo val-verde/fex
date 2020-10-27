@@ -304,6 +304,24 @@ bool ConstProp::Run(IREmitter *IREmit) {
           break;
         }
 
+        case OP_SELECT:
+        {
+          uint64_t Constant1;
+          uint64_t Constant2;
+
+          if (IREmit->IsValueConstant(Op->Header.Args[2], &Constant1) &&
+              IREmit->IsValueConstant(Op->Header.Args[3], &Constant2) &&
+              Constant1 == 1 &&
+              Constant2 == 0)
+          {
+            IREmit->SetWriteCursor(CurrentIR.GetNode(Op->Header.Args[2]));
+
+            IREmit->ReplaceNodeArgument(CodeNode, 2, IREmit->_InlineConstant(Constant1));
+            IREmit->ReplaceNodeArgument(CodeNode, 3, IREmit->_InlineConstant(Constant2));
+          }
+          break;
+        }
+
         default: break;
       }
     }

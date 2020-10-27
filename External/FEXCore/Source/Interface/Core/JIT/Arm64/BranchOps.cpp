@@ -61,6 +61,8 @@ DEF_OP(CallbackReturn) {
 }
 
 DEF_OP(ExitFunction) {
+  auto Op = IROp->C<IR::IROp_ExitFunction>();
+
   if (SpillSlots) {
     add(sp, sp, SpillSlots * 16);
   }
@@ -71,8 +73,12 @@ DEF_OP(ExitFunction) {
 
   aarch64::Label FullLookup;
 
-  ldr(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
-  auto RipReg = x2;
+  auto RipReg = GetReg<RA_64>(Op->Header.Args[0].ID());
+
+  //LoadConstant(x2, 0xDEADBEEF00);
+  //str(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
+  
+  //str(RipReg, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
 
   // L1 Cache
   LoadConstant(x0, State->BlockCache->GetL1Pointer());
@@ -85,7 +91,8 @@ DEF_OP(ExitFunction) {
   br(x1);
 
   bind(&FullLookup);
-  LoadConstant(x0, AbsoluteLoopTopAddress);
+  mov(x2, RipReg);
+  LoadConstant(x0, AbsoluteFullLookupAddress);
   br(x0);
 }
 

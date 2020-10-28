@@ -1280,6 +1280,36 @@ void OpDispatchBuilder::SETccOp(OpcodeArgs) {
     }
   }
 
+  if (flagsOp == 1) {
+    switch(Op->OP) {
+      // SGT
+      case 0x9F: SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDestSigned, cmpSrcSigned, OneConst, ZeroConst, cmpSize); break;
+      // SLE
+      case 0x9E: SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDestSigned, cmpSrcSigned, OneConst, ZeroConst, cmpSize); break;
+      // SGE
+      case 0x9D: SrcCond = _Select(FEXCore::IR::COND_SGE, cmpDestSigned, cmpSrcSigned, OneConst, ZeroConst, cmpSize); break;
+      // SL
+      case 0x9C: SrcCond = _Select(FEXCore::IR::COND_SLT, cmpDestSigned, cmpSrcSigned, OneConst, ZeroConst, cmpSize); break;
+      
+      // not sign
+      //case 0x49: SrcCond = _Select(FEXCore::IR::COND_, cmpDestSigned, cmpSrcSigned, OneConst, ZeroConst, cmpSize); break;
+      // sign
+      //case 0x48: SrcCond = _Select(FEXCore::IR::COND_, cmpDestSigned, cmpSrcSigned, OneConst, ZeroConst, cmpSize); break;
+      
+      // UABove
+      case 0x97: SrcCond = _Select(FEXCore::IR::COND_UGT, cmpDest, cmpSrc, OneConst, ZeroConst, cmpSize); break;
+      // UBE
+      case 0x96: SrcCond = _Select(FEXCore::IR::COND_ULE, cmpDest, cmpSrc, OneConst, ZeroConst, cmpSize); break;
+      // NE
+      case 0x95: SrcCond = _Select(FEXCore::IR::COND_NEQ, cmpDest, cmpSrc, OneConst, ZeroConst, cmpSize); break;
+      // EQ/Zero
+      case 0x94: SrcCond = _Select(FEXCore::IR::COND_EQ, cmpDest, cmpSrc, OneConst, ZeroConst, cmpSize); break;
+      // UAE
+      case 0x93: SrcCond = _Select(FEXCore::IR::COND_UGE, cmpDest, cmpSrc, OneConst, ZeroConst, cmpSize); break;
+      // UBelow
+      case 0x92: SrcCond = _Select(FEXCore::IR::COND_ULT, cmpDest, cmpSrc, OneConst, ZeroConst, cmpSize); break;
+    }
+  }
   StoreResult(GPRClass, Op, SrcCond, -1);
 }
 
@@ -1618,7 +1648,6 @@ void OpDispatchBuilder::CMOVOp(OpcodeArgs) {
   enum CompareType {
     COMPARE_ZERO,
     COMPARE_NOTZERO,
-    //COMPARE_EQUALMASK,
     COMPARE_OTHER,
   };
   uint32_t FLAGMask;
@@ -1767,12 +1796,33 @@ void OpDispatchBuilder::CMOVOp(OpcodeArgs) {
   }
 
   if (flagsOp == 1) {
-    if (Op->OP == 0x4F) {
-      SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDestSigned, cmpSrcSigned, Src, Dest, cmpSize);
-      //printf("SGT OPT!\n");
-    } else if (Op->OP == 0x4E) {
-      SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDestSigned, cmpSrcSigned, Src, Dest, cmpSize);
-      //printf("SLE OPT!\n");
+    switch(Op->OP) {
+      // SGT
+      case 0x4F: SrcCond = _Select(FEXCore::IR::COND_SGT, cmpDestSigned, cmpSrcSigned, Src, Dest, cmpSize); break;
+      // SLE
+      case 0x4E: SrcCond = _Select(FEXCore::IR::COND_SLE, cmpDestSigned, cmpSrcSigned, Src, Dest, cmpSize); break;
+      // SGE
+      case 0x4D: SrcCond = _Select(FEXCore::IR::COND_SGE, cmpDestSigned, cmpSrcSigned, Src, Dest, cmpSize); break;
+      // SL
+      case 0x4C: SrcCond = _Select(FEXCore::IR::COND_SLT, cmpDestSigned, cmpSrcSigned, Src, Dest, cmpSize); break;
+      
+      // not sign
+      //case 0x49: SrcCond = _Select(FEXCore::IR::COND_, cmpDestSigned, cmpSrcSigned, Src, Dest, cmpSize); break;
+      // sign
+      //case 0x48: SrcCond = _Select(FEXCore::IR::COND_, cmpDestSigned, cmpSrcSigned, Src, Dest, cmpSize); break;
+      
+      // UABove
+      case 0x47: SrcCond = _Select(FEXCore::IR::COND_UGT, cmpDest, cmpSrc, Src, Dest, cmpSize); break;
+      // UBE
+      case 0x46: SrcCond = _Select(FEXCore::IR::COND_ULE, cmpDest, cmpSrc, Src, Dest, cmpSize); break;
+      // NE
+      case 0x45: SrcCond = _Select(FEXCore::IR::COND_NEQ, cmpDest, cmpSrc, Src, Dest, cmpSize); break;
+      // EQ/Zero
+      case 0x44: SrcCond = _Select(FEXCore::IR::COND_EQ, cmpDest, cmpSrc, Src, Dest, cmpSize); break;
+      // UAE
+      case 0x43: SrcCond = _Select(FEXCore::IR::COND_UGE, cmpDest, cmpSrc, Src, Dest, cmpSize); break;
+      // UBelow
+      case 0x42: SrcCond = _Select(FEXCore::IR::COND_ULT, cmpDest, cmpSrc, Src, Dest, cmpSize); break;
     }
   }
 

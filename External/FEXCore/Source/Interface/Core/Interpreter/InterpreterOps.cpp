@@ -480,6 +480,7 @@ void InterpreterOps::InterpretIR(FEXCore::Core::InternalThreadState *Thread, FEX
           case IR::OP_BEGINBLOCK:
           case IR::OP_ENDBLOCK:
           case IR::OP_INVALIDATEFLAGS:
+          case IR::OP_ENTRYPOINT:
             break;
           case IR::OP_FENCE: {
             auto Op = IROp->C<IR::IROp_Fence>();

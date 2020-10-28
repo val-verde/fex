@@ -665,6 +665,10 @@ namespace FEXCore::Context {
         break;
       }
 
+      if (Block.IsEntrypoint) {
+        Thread->OpDispatcher->_Entrypoint(Block.Entry - GuestRIP);
+      }
+
       for (size_t i = 0; i < InstsInBlock; ++i) {
         FEXCore::X86Tables::X86InstInfo const* TableInfo {nullptr};
         FEXCore::X86Tables::DecodedInst const* DecodedInfo {nullptr};
@@ -1125,8 +1129,16 @@ namespace FEXCore::Context {
     if (DecrementRefCount)
       --Thread->CompileBlockReentrantRefCount;
 
-    // Insert to lookup cache
-    AddBlockMapping(Thread, GuestRIP, CodePtr, MinAddress, MaxAddress);
+    for (const auto& [EntryGuest, EntryHost]: DebugData->Entrypoints) {
+      if (Thread->LookupCache->FindBlock(GuestRIP + EntryGuest)) {
+        LogMan::Throw::A(EntryGuest != 0, "Dupplicate entrypoint?");
+
+        continue;
+      }
+      
+      // Insert to lookup cache
+      AddBlockMapping(Thread, GuestRIP + EntryGuest, EntryHost, MinAddress, MaxAddress);
+    }
 
     return (uintptr_t)CodePtr;
   }

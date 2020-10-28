@@ -8,6 +8,7 @@
 
 #include <map>
 #include <thread>
+#include <tuple>
 
 namespace FEXCore {
   class LookupCache;
@@ -54,6 +55,7 @@ namespace FEXCore::Core {
     uint64_t TimeSpentInCode; ///< How long this code has spent time running
     uint64_t RunCount; ///< Number of times this block of code has been run
     std::vector<DebugDataSubblock> Subblocks;
+    std::vector<std::tuple<uint64_t, void*>> Entrypoints;
   };
 
   enum SignalEvent {

@@ -21,6 +21,7 @@ public:
     uint64_t NumInstructions{};
     FEXCore::X86Tables::DecodedInst *DecodedInstructions;
     bool HasInvalidInstruction{};
+    bool IsEntrypoint;
   };
 
   Decoder(FEXCore::Context::Context *ctx);
@@ -68,6 +69,7 @@ private:
 
   std::vector<DecodedBlocks> Blocks;
   std::set<uint64_t> BlocksToDecode;
+  std::set<uint64_t> Entrypoints;
   std::set<uint64_t> HasBlocks;
 
   // ModRM rm decoding

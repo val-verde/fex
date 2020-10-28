@@ -938,9 +938,16 @@ void Decoder::BranchTargetInMultiblockRange() {
       TargetRIP = DecodeInst->PC + DecodeInst->InstSize + DecodeInst->Src[0].TypeLiteral.Literal;
       Conditional = false;
     break;
+    case 0xFF: // Call, reg
+    case 0xE8: // Call - Immediate target
+      //We don't want to inline calls, but we want to compile the block that would return
+      TargetRIP = DecodeInst->PC + DecodeInst->InstSize;
+      Conditional = false;
+      Entrypoints.emplace(TargetRIP);
+      //printf(" Call: Adding entrypoint, %lX\n", TargetRIP);
+    break;
     case 0xC2: // RET imm
     case 0xC3: // RET
-    case 0xE8: // Call - Immediate target, We don't want to inline calls
     default:
       return;
     break;
@@ -996,7 +1003,9 @@ bool Decoder::DecodeInstructionsAtEntry(uint8_t const* _InstStream, uint64_t PC)
   DecodedMaxAddress = EntryPoint;
 
   // Entry is a jump target
+  //printf("FN start: %lx\n", PC);
   BlocksToDecode.emplace(PC);
+  Entrypoints.emplace(PC);
 
   while (!BlocksToDecode.empty()) {
     auto BlockDecodeIt = BlocksToDecode.begin();
@@ -1005,7 +1014,10 @@ bool Decoder::DecodeInstructionsAtEntry(uint8_t const* _InstStream, uint64_t PC)
     DecodedBlocks &CurrentBlockDecoding = Blocks.back();
 
     CurrentBlockDecoding.Entry = RIPToDecode;
+    CurrentBlockDecoding.IsEntrypoint = Entrypoints.count(RIPToDecode) != 0;
 
+    //printf(" Decoding Block %lX %d\n", CurrentBlockDecoding.Entry, CurrentBlockDecoding.IsEntrypoint);
+    
     uint64_t PCOffset = 0;
     uint64_t BlockNumberOfInstructions{};
     uint64_t BlockStartOffset = DecodedSize;

@@ -620,26 +620,7 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView const *IR, [
 
 	void *Entry = getCurr<void*>();
   this->IR = IR;
-
-  if (CTX->GetGdbServerStatus()) {
-    Label RunBlock;
-
-    // If we have a gdb server running then run in a less efficient mode that checks if we need to exit
-    // This happens when single stepping
-    static_assert(sizeof(CTX->Config.RunningMode) == 4, "This is expected to be size of 4");
-    mov(rax, qword [STATE + (offsetof(FEXCore::Core::InternalThreadState, CTX))]);
-
-    // If the value == 0 then branch to the top
-    cmp(dword [rax + (offsetof(FEXCore::Context::Context, Config.RunningMode))], 0);
-    je(RunBlock);
-    // Else we need to pause now
-    mov(rax, ThreadPauseHandlerAddress);
-    jmp(rax);
-    ud2();
-
-    L(RunBlock);
-  }
-
+  
   if (HeaderOp->ShouldInterpret) {
     mov(rax, HeaderOp->Entry);
     mov(qword [STATE + offsetof(FEXCore::Core::CPUState, rip)], rax);
@@ -656,10 +637,6 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView const *IR, [
     LogMan::Throw::A(RAData != nullptr, "Needs RA");
 
     SpillSlots = RAData->SpillSlots();
-
-    if (SpillSlots) {
-      sub(rsp, SpillSlots * 16);
-    }
 
   #ifdef BLOCKSTATS
     BlockSamplingData::BlockData *SamplingData = CTX->BlockData->GetBlockData(HeaderOp->Entry);
@@ -765,6 +742,36 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView const *IR, [
         }
         #endif
         uint32_t ID = IR->GetID(CodeNode);
+
+        if (IROp->Op == OP_ENTRYPOINT) {
+          auto Op = IROp->C<IR::IROp_Entrypoint>();
+          DebugData->Entrypoints.push_back({Op->GuestRIPOffset,  getCurr<void*>() });
+          //printf(" OP_ENTRYPOINT: %lX -> %p\n", Op->GuestRIPOffset, Buffer->GetOffsetAddress<void*>(GetCursorOffset()));
+
+          if (CTX->GetGdbServerStatus()) {
+            Label RunBlock;
+
+            // If we have a gdb server running then run in a less efficient mode that checks if we need to exit
+            // This happens when single stepping
+            static_assert(sizeof(CTX->Config.RunningMode) == 4, "This is expected to be size of 4");
+            mov(rax, qword [STATE + (offsetof(FEXCore::Core::InternalThreadState, CTX))]);
+
+            // If the value == 0 then branch to the top
+            cmp(dword [rax + (offsetof(FEXCore::Context::Context, Config.RunningMode))], 0);
+            je(RunBlock);
+            // Else we need to pause now
+            mov(rax, ThreadPauseHandlerAddress);
+            jmp(rax);
+            ud2();
+
+            L(RunBlock);
+          }
+          
+          if (SpillSlots) {
+            sub(rsp, SpillSlots * 16);
+          }
+          continue;
+        }
 
         // Execute handler
         OpHandler Handler = OpHandlers[IROp->Op];

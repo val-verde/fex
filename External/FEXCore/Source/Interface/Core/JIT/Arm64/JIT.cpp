@@ -825,6 +825,8 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView const *IR, [
   auto Buffer = GetBuffer();
   auto Entry = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
 
+  DebugData->Entrypoints.push_back({0, (void*)Entry});
+  
  if (CTX->GetGdbServerStatus()) {
     aarch64::Label RunBlock;
 
@@ -902,6 +904,19 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView const *IR, [
       for (auto [CodeNode, IROp] : IR->GetCode(BlockNode)) {
         uint32_t ID = IR->GetID(CodeNode);
 
+        if (IROp->Op == OP_ENTRYPOINT) {
+          auto Op = IROp->C<IR::IROp_Entrypoint>();
+          DebugData->Entrypoints.push_back({Op->GuestRIPOffset,  Buffer->GetOffsetAddress<void*>(GetCursorOffset()) });
+          //printf(" OP_ENTRYPOINT: %lX -> %p\n", Op->GuestRIPOffset, Buffer->GetOffsetAddress<void*>(GetCursorOffset()));
+
+          if (SpillSlots) {
+            //add(TMP1, sp, 0); // Move that supports SP
+            sub(sp, sp, SpillSlots * 16);
+            //stp(TMP1, lr, MemOperand(sp, -16, PreIndex));
+          }
+          continue;
+        }
+
         // Execute handler
         OpHandler Handler = OpHandlers[IROp->Op];
         (this->*Handler)(IROp, ID);
@@ -910,6 +925,10 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView const *IR, [
       if (DebugData) {
         DebugData->Subblocks.back().HostCodeSize = Buffer->GetOffsetAddress<uintptr_t>(GetCursorOffset()) - DebugData->Subblocks.back().HostCodeStart;
       }
+      
+      // Execute handler
+      OpHandler Handler = OpHandlers[IROp->Op];
+      (this->*Handler)(IROp, ID);
     }
 
     // Make sure last branch is generated. It certainly can't be eliminated here.

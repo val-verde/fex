@@ -368,7 +368,12 @@ Res InterpreterCore::GetSrc(void* SSAData, IR::OrderedNodeWrapper Src) {
   return reinterpret_cast<Res>(DstPtr);
 }
 
-void *InterpreterCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const *IR, [[maybe_unused]] FEXCore::Core::DebugData *DebugData) {
+void *InterpreterCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const *IR, [[maybe_unused]] FEXCore::Core::DebugData *DebugData, std::vector<std::tuple<uint64_t, void*>>* Entrypoints) {
+  
+  if (Entrypoints != nullptr) {
+    Entrypoints->push_back({IR->GetHeader()->Entry, reinterpret_cast<void*>(InterpreterExecution)});
+  }
+
   return reinterpret_cast<void*>(InterpreterExecution);
 }
 
@@ -443,6 +448,7 @@ void InterpreterCore::ExecuteCode(FEXCore::Core::InternalThreadState *Thread) {
           case IR::OP_BEGINBLOCK:
           case IR::OP_ENDBLOCK:
           case IR::OP_INVALIDATEFLAGS:
+          case IR::OP_ENTRYPOINT:
             break;
           case IR::OP_FENCE: {
             auto Op = IROp->C<IR::IROp_Fence>();

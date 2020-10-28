@@ -114,7 +114,7 @@ namespace DefaultFallbackCore {
     void Initialize() override {}
     bool NeedsOpDispatch() override { return false; }
 
-    void *CompileCode(FEXCore::IR::IRListView<true> const *IR, FEXCore::Core::DebugData *DebugData) override {
+    void *CompileCode(FEXCore::IR::IRListView<true> const *IR, FEXCore::Core::DebugData *DebugData, std::vector<std::tuple<uint64_t, void*>>* Entrypoints) override {
       LogMan::Msg::E("Fell back to default code handler at RIP: 0x%lx", ThreadState->State.State.rip);
       return nullptr;
     }
@@ -639,6 +639,7 @@ namespace FEXCore::Context {
 
       auto CodeBlocks = Thread->FrontendDecoder->GetDecodedBlocks();
 
+      //printf("TR FN: %lX\n", GuestRIP);
       Thread->OpDispatcher->BeginFunction(GuestRIP, CodeBlocks);
 
       for (size_t j = 0; j < CodeBlocks->size(); ++j) {
@@ -648,6 +649,11 @@ namespace FEXCore::Context {
 
         uint64_t BlockInstructionsLength {};
         Thread->OpDispatcher->flagsOp = false;
+
+        //printf(" TR Block: %lX %d\n", Block.Entry, Block.IsEntrypoint);
+        if (Block.IsEntrypoint) {
+          Thread->OpDispatcher->_Entrypoint(Block.Entry);
+        }
 
         uint64_t InstsInBlock = Block.NumInstructions;
         for (size_t i = 0; i < InstsInBlock; ++i) {
@@ -766,18 +772,26 @@ namespace FEXCore::Context {
       }
     }
 
+
     // Attempt to get the CPU backend to compile this code
-    CodePtr = Thread->CPUBackend->CompileCode(IRList, DebugData);
+    std::vector<std::tuple<uint64_t, void*>> Entrypoints;
+    CodePtr = Thread->CPUBackend->CompileCode(IRList, DebugData, &Entrypoints);
 
     if (CodePtr != nullptr) {
-      // The core managed to compile the code.
-#if ENABLE_JITSYMBOLS
-      Symbols.Register(CodePtr, GuestRIP, DebugData->HostCodeSize);
-#endif
+      //printf("Code Blob: %p %d %d\n", CodePtr, DebugData->HostCodeSize, Entrypoints.size());
+      #if ENABLE_JITSYMBOLS
+        Symbols.Register(CodePtr, GuestRIP, DebugData->HostCodeSize);
+      #endif
 
-      return AddBlockMapping(Thread, GuestRIP, CodePtr);
+      for (const auto& [EntryGuest, EntryHost]: Entrypoints) {
+        // The core managed to compile the code.
+        //printf("-Entry: %lX -> %p\n", EntryGuest, EntryHost);
+        AddBlockMapping(Thread, EntryGuest, EntryHost);
+      }
+
+      return Thread->BlockCache->FindBlock(GuestRIP);
     }
-
+    
     return 0;
   }
 
@@ -785,7 +799,7 @@ namespace FEXCore::Context {
     // We have ONE more chance to try and fallback to the fallback CPU backend
     // This will most likely fail since regular code use won't be using a fallback core.
     // It's mainly for testing new instruction encodings
-    void *CodePtr = Thread->FallbackBackend->CompileCode(nullptr, nullptr);
+    void *CodePtr = Thread->FallbackBackend->CompileCode(nullptr, nullptr, nullptr);
     if (CodePtr) {
      uintptr_t Ptr = reinterpret_cast<uintptr_t >(AddBlockMapping(Thread, GuestRIP, CodePtr));
      return Ptr;

@@ -1,6 +1,8 @@
 #pragma once
 #include <stdint.h>
 #include <string>
+#include <vector>
+#include <tuple>
 
 namespace FEXCore {
 
@@ -44,7 +46,7 @@ class LLVMCore;
      * @return An executable function pointer that is theoretically compiled from this point.
      * Is actually a function pointer of type `void (FEXCore::Core::ThreadState *Thread)
      */
-    virtual void *CompileCode(FEXCore::IR::IRListView<true> const *IR, FEXCore::Core::DebugData *DebugData) = 0;
+    virtual void* CompileCode(FEXCore::IR::IRListView<true> const *IR, FEXCore::Core::DebugData *DebugData, std::vector<std::tuple<uint64_t, void*>>* Entrypoints) = 0;
 
     /**
      * @brief Function for mapping memory in to the CPUBackend's visible space. Allows setting up virtual mappings if required

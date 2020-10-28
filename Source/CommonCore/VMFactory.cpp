@@ -17,7 +17,7 @@ namespace VMFactory {
     explicit VMCore(FEXCore::Context::Context* CTX, FEXCore::Core::ThreadState *Thread, bool Fallback);
     ~VMCore() override;
     std::string GetName() override { return "VM Core"; }
-    void* CompileCode(FEXCore::IR::IRListView<true> const *IR, FEXCore::Core::DebugData *DebugData) override;
+    void* CompileCode(FEXCore::IR::IRListView<true> const *IR, FEXCore::Core::DebugData *DebugData, std::vector<std::tuple<uint64_t, void*>>* Entrypoints) override;
 
     void *MapRegion(void *HostPtr, uint64_t VirtualGuestPtr, uint64_t Size) override {
       MemoryRegions.emplace_back(MemoryRegion{HostPtr, VirtualGuestPtr, Size});
@@ -205,7 +205,7 @@ namespace VMFactory {
     Core->ExecuteCode(Thread);
   }
 
-  void* VMCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const *IR, FEXCore::Core::DebugData *DebugData) {
+  void* VMCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const *IR, FEXCore::Core::DebugData *DebugData, std::vector<std::tuple<uint64_t, void*>>* Entrypoints) {
     if (IsFallback)
       return reinterpret_cast<void*>(VMExecutionFallback);
     else

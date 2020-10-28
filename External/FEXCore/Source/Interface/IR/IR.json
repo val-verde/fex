@@ -93,6 +93,15 @@
       ]
     },
 
+    "Entrypoint": {
+      "HasSideEffects": true,
+      "OpClass": "Misc",
+      "SwitchGen": false,
+      "Args": [
+        "uint64_t", "GuestRIP"
+      ]
+    },
+
     "InvalidateFlags": {
       "OpClass": "Misc",
       "HasSideEffects": true

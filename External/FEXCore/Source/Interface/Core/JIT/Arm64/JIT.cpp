@@ -587,7 +587,7 @@ bool JITCore::IsInlineConstant(const IR::OrderedNodeWrapper& WNode, uint64_t* Va
   }
 }
 
-void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const *IR, [[maybe_unused]] FEXCore::Core::DebugData *DebugData) {
+void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const *IR, [[maybe_unused]] FEXCore::Core::DebugData *DebugData, std::vector<std::tuple<uint64_t, void*>>* Entrypoints) {
   using namespace aarch64;
   JumpTargets.clear();
   uint32_t SSACount = IR->GetSSACount();
@@ -609,6 +609,7 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
     auto CodeEnd = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
     CPU.EnsureIAndDCacheCoherency(reinterpret_cast<void*>(Entry), CodeEnd - reinterpret_cast<uint64_t>(Entry));
 
+    Entrypoints->push_back({HeaderOp->Entry, (void*)Entry});
     return reinterpret_cast<void*>(Entry);
   }
 
@@ -646,11 +647,6 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
 
   auto Entry = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
 
-  if (SpillSlots) {
-    //add(TMP1, sp, 0); // Move that supports SP
-    sub(sp, sp, SpillSlots * 16);
-    //stp(TMP1, lr, MemOperand(sp, -16, PreIndex));
-  }
 
   PendingTargetLabel = nullptr;
   for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
@@ -660,6 +656,7 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
 
     {
       uint32_t Node = IR->GetID(BlockNode);
+      //printf("NODE: %d\n", Node);
       auto IsTarget = JumpTargets.find(Node);
       if (IsTarget == JumpTargets.end()) {
         IsTarget = JumpTargets.try_emplace(Node).first;
@@ -676,6 +673,18 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
     for (auto [CodeNode, IROp] : IR->GetCode(BlockNode)) {
       uint32_t ID = IR->GetID(CodeNode);
 
+      if (IROp->Op == OP_ENTRYPOINT) {
+        auto Op = IROp->C<IR::IROp_Entrypoint>();
+        Entrypoints->push_back({Op->GuestRIP,  Buffer->GetOffsetAddress<void*>(GetCursorOffset()) });
+        //printf(" OP_ENTRYPOINT: %lX -> %p\n", Op->GuestRIP, Buffer->GetOffsetAddress<void*>(GetCursorOffset()));
+
+        if (SpillSlots) {
+          //add(TMP1, sp, 0); // Move that supports SP
+          sub(sp, sp, SpillSlots * 16);
+          //stp(TMP1, lr, MemOperand(sp, -16, PreIndex));
+        }
+        continue;
+      }
       // Execute handler
       OpHandler Handler = OpHandlers[IROp->Op];
       (this->*Handler)(IROp, ID);
@@ -834,7 +843,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   Literal l_VirtualMemory {VirtualMemorySize};
   Literal l_PagePtr {Thread->BlockCache->GetPagePointer()};
   Literal l_CTX {reinterpret_cast<uintptr_t>(CTX)};
-  Literal l_Interpreter {reinterpret_cast<uint64_t>(State->IntBackend->CompileCode(nullptr, nullptr))};
+  Literal l_Interpreter {reinterpret_cast<uint64_t>(State->IntBackend->CompileCode(nullptr, nullptr, nullptr))};
   Literal l_Sleep {reinterpret_cast<uint64_t>(SleepThread)};
 
   uintptr_t CompileBlockPtr{};

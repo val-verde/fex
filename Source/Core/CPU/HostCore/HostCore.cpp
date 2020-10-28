@@ -26,7 +26,7 @@ public:
   explicit HostCore(FEX::ThreadState *Thread);
   ~HostCore() override = default;
   std::string GetName() override { return "Host Stepper"; }
-  void* CompileCode(FEX::IR::IntrusiveIRList const *ir, FEX::CPU::DebugData *DebugData) override;
+  void* CompileCode(FEX::IR::IntrusiveIRList const *ir, FEX::CPU::DebugData *DebugData, std::vector<std::tuple<uint64_t, void*>>* Entrypoints) override;
 
   void *MapRegion(void *HostPtr, uint64_t GuestPtr, uint64_t Size) override {
     // Map locally to unprotected
@@ -251,7 +251,7 @@ void HostCore::ExecutionThreadFunction() {
     }
   }
 }
-void* HostCore::CompileCode([[maybe_unused]] FEX::IR::IntrusiveIRList const* ir, FEX::CPU::DebugData *DebugData) {
+void* HostCore::CompileCode([[maybe_unused]] FEX::IR::IntrusiveIRList const* ir, FEX::CPU::DebugData *DebugData, std::vector<std::tuple<uint64_t, void*>>* Entrypoints) {
   printf("Attempting to compile: 0x%lx\n", ThreadState->CPUState.rip);
   return reinterpret_cast<void*>(HostExecution);
 }

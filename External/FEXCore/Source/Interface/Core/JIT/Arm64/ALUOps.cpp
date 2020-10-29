@@ -1135,9 +1135,9 @@ DEF_OP(Select) {
     if (is_const_false != true || is_const_true != false || const_true != 1 || const_false != 0) {
       LogMan::Msg::A("Select: Unsupported compare inline parameters");
     }
-    cset(GetReg<RA_64>(Node), cc);
+    cset(GRS(Node), cc);
   } else {
-    csel(GetReg<RA_64>(Node), GetReg<RA_64>(Op->Header.Args[2].ID()), GetReg<RA_64>(Op->Header.Args[3].ID()), cc);
+    csel(GRS(Node), GRS(Op->Header.Args[2].ID()), GRS(Op->Header.Args[3].ID()), cc);
   }
 }
 

@@ -1600,9 +1600,17 @@ void InterpreterCore::ExecuteCode(FEXCore::Core::InternalThreadState *Thread) {
             uint64_t Src1 = *GetSrc<uint64_t*>(SSAData, Op->Header.Args[0]);
             uint64_t Src2 = *GetSrc<uint64_t*>(SSAData, Op->Header.Args[1]);
 
-            uint64_t ArgTrue = *GetSrc<uint64_t*>(SSAData, Op->Header.Args[2]);
-            uint64_t ArgFalse = *GetSrc<uint64_t*>(SSAData, Op->Header.Args[3]);
+            uint64_t ArgTrue;
+            uint64_t ArgFalse;
 
+            if (OpSize == 4) {
+              ArgTrue = *GetSrc<uint32_t*>(SSAData, Op->Header.Args[2]);
+              ArgFalse = *GetSrc<uint32_t*>(SSAData, Op->Header.Args[3]);
+            } else {
+              ArgTrue = *GetSrc<uint64_t*>(SSAData, Op->Header.Args[2]);
+              ArgFalse = *GetSrc<uint64_t*>(SSAData, Op->Header.Args[3]);
+            }
+            
             switch (Op->Cond.Val) {
               case FEXCore::IR::COND_EQ:
                 CompResult = Src1 == Src2;

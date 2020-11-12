@@ -55,6 +55,8 @@ DEF_OP(CallbackReturn) {
 }
 
 DEF_OP(ExitFunction) {
+  auto Op = IROp->C<IR::IROp_ExitFunction>();
+
   if (SpillSlots) {
     add(rsp, SpillSlots * 16);
   }
@@ -66,7 +68,7 @@ DEF_OP(ExitFunction) {
   Label FullLookup;
 
   // Load our RIP
-  mov(rdx, qword [STATE + offsetof(FEXCore::Core::CPUState, rip)]);
+  mov(rdx, GetSrc<RA_64>(Op->NewRIP.ID()));
 
   // L1 Cache
   mov(r13, ThreadState->BlockCache->GetL1Pointer());

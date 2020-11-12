@@ -484,7 +484,17 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
 
   auto HeaderOp = IR->GetHeader();
   if (HeaderOp->ShouldInterpret) {
-    return InterpreterFallbackHelperAddress;
+    void *Entry = getCurr<void*>();
+
+    mov(rax, HeaderOp->Entry);
+    mov(qword [STATE + offsetof(FEXCore::Core::CPUState, rip)], rax);
+
+    mov(rax, (uintptr_t)InterpreterFallbackHelperAddress);
+    jmp(rax);
+
+    ready();
+
+    return Entry;
   }
 
   // Fairly excessive buffer range to make sure we don't overflow
@@ -801,6 +811,9 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   // Block creation
   {
     L(NoBlock);
+
+    // Store RIP, just in case
+    mov(qword [STATE + offsetof(FEXCore::Core::CPUState, rip)], rdx);
 
     using ClassPtrType = uintptr_t (FEXCore::Context::Context::*)(FEXCore::Core::InternalThreadState *, uint64_t);
     union PtrCast {

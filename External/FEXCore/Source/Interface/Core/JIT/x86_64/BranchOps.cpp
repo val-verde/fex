@@ -72,7 +72,8 @@ DEF_OP(ExitFunction) {
     Label l_BranchHost;
     Label l_BranchGuest;
 
-    call(qword[rip + l_BranchHost]);
+    lea(rax, ptr[rip + l_BranchHost]);
+    jmp(qword[rax]);
     
     L(l_BranchHost);
     dq(ExitFunctionLinkerAddress);

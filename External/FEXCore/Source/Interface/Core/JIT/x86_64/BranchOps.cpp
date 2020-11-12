@@ -64,26 +64,41 @@ DEF_OP(ExitFunction) {
 #ifdef BLOCKSTATS
   ExitBlock();
 #endif
-  
-  Label FullLookup;
 
-  // Load our RIP
-  mov(rdx, GetSrc<RA_64>(Op->NewRIP.ID()));
+  uint64_t Const;
+  bool isConst = IsInlineConstant(Op->Header.Args[0], &Const);
 
-  // L1 Cache
-  mov(r13, ThreadState->BlockCache->GetL1Pointer());
-  mov(rax, rdx);
+  if (isConst) {
+    Label l_BranchHost;
+    Label l_BranchGuest;
 
-  and_(rax, 1 * 1024 * 1024 - 1);
-  shl(rax, 1);
-  cmp(qword[r13 + rax*8 + 8], rdx);
-  jne(FullLookup);
-  jmp(qword[r13 + rax*8 + 0]);
-  
-  // TODO: Pools + local jumps
-  L(FullLookup);
-  mov(TMP1, AbsoluteFullLookupAddress);
-  jmp(TMP1);
+    call(qword[rip + l_BranchHost]);
+    
+    L(l_BranchHost);
+    dq(ExitFunctionLinkerAddress);
+    L(l_BranchGuest);
+    dq(Const);
+  } else {
+    Label FullLookup;
+
+    // Load our RIP
+    mov(rdx, GetSrc<RA_64>(Op->NewRIP.ID()));
+
+    // L1 Cache
+    mov(r13, ThreadState->BlockCache->GetL1Pointer());
+    mov(rax, rdx);
+
+    and_(rax, 1 * 1024 * 1024 - 1);
+    shl(rax, 1);
+    cmp(qword[r13 + rax*8 + 8], rdx);
+    jne(FullLookup);
+    jmp(qword[r13 + rax*8 + 0]);
+    
+    // TODO: Pools + local jumps
+    L(FullLookup);
+    mov(TMP1, AbsoluteFullLookupAddress);
+    jmp(TMP1);
+  }
 }
 
 DEF_OP(Jump) {

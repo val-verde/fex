@@ -714,10 +714,10 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     mov(rax, rdx);
 
     and_(rax, 1 * 1024 * 1024 - 1);
-    shl(rax, 1);
-    cmp(qword[r13 + rax*8 + 0], rdx);
+    shl(rax, 4);
+    cmp(qword[r13 + rax + 8], rdx);
     jne(FullLookup);
-    jmp(qword[r13 + rax*8 + 8]);
+    jmp(qword[r13 + rax + 0]);
     jmp(LoopTop);
     
     L(FullLookup);
@@ -758,8 +758,8 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     mov(rcx, rdx);
     and_(rcx, 1 * 1024 * 1024 - 1);
     shl(rcx, 1);
-    mov(qword[r13 + rcx*8 + 0], rdx);
-    mov(qword[r13 + rcx*8 + 8], rax);
+    mov(qword[r13 + rcx*8 + 8], rdx);
+    mov(qword[r13 + rcx*8 + 0], rax);
     
     // Real block if we made it here
     jmp(rax);

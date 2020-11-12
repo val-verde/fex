@@ -874,7 +874,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
 
   and_(x3, RipReg, 1 * 1024 * 1024 - 1);
   add(x0, x0, Operand(x3, Shift::LSL, 4));
-  ldp(x0, x1, MemOperand(x0));
+  ldp(x1, x0, MemOperand(x0));
   cmp(x0, RipReg);
   b(&FullLookup, Condition::ne);
   br(x1);
@@ -929,7 +929,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
 
       and_(x1, RipReg, 1 * 1024 * 1024 - 1);
       add(x0, x0, Operand(x1, Shift::LSL, 4));
-      stp(x2, x3, MemOperand(x0));
+      stp(x3, x2, MemOperand(x0));
       br(x3);
     }
 

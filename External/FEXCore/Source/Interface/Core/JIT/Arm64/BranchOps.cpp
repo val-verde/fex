@@ -79,7 +79,7 @@ DEF_OP(ExitFunction) {
 
   and_(x3, RipReg, 1 * 1024 * 1024 - 1);
   add(x0, x0, Operand(x3, Shift::LSL, 4));
-  ldp(x0, x1, MemOperand(x0));
+  ldp(x1, x0, MemOperand(x0));
   cmp(x0, RipReg);
   b(&FullLookup, Condition::ne);
   br(x1);

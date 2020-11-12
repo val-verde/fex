@@ -74,9 +74,9 @@ DEF_OP(ExitFunction) {
 
   and_(rax, 1 * 1024 * 1024 - 1);
   shl(rax, 1);
-  cmp(qword[r13 + rax*8 + 0], rdx);
+  cmp(qword[r13 + rax*8 + 8], rdx);
   jne(FullLookup);
-  jmp(qword[r13 + rax*8 + 8]);
+  jmp(qword[r13 + rax*8 + 0]);
   
   // TODO: Pools + local jumps
   L(FullLookup);

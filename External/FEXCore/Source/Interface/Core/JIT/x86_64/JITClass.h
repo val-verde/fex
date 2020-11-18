@@ -285,6 +285,8 @@ private:
   DEF_OP(StoreContextPair);
   DEF_OP(LoadContext);
   DEF_OP(StoreContext);
+  DEF_OP(LoadRegister);
+  DEF_OP(StoreRegister);
   DEF_OP(LoadContextIndexed);
   DEF_OP(StoreContextIndexed);
   DEF_OP(SpillRegister);

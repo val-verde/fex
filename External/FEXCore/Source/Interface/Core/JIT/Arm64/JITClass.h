@@ -342,6 +342,7 @@ private:
   ///< Memory ops
   DEF_OP(LoadContextPair);
   DEF_OP(StoreContextPair);
+
   DEF_OP(LoadContext);
   DEF_OP(StoreContext);
   DEF_OP(LoadContextIndexed);

@@ -33,7 +33,7 @@ bool IsStaticAlloc(uint32_t Offset) {
 bool StaticRegisterAllocationPass::Run(IREmitter *IREmit) {
   auto CurrentIR = IREmit->ViewIR();
 
-  if (!CurrentIR.GetHeader()->ShouldInterpret)
+  if (CurrentIR.GetHeader()->ShouldInterpret)
     return false;
 
   for (auto [BlockNode, BlockIROp] : CurrentIR.GetBlocks()) {

@@ -222,6 +222,11 @@ namespace {
         return Op->Class;
         break;
       }
+      case IR::OP_LOADREGISTER: {
+        auto Op = IROp->C<IR::IROp_LoadRegister>();
+        return Op->Class;
+        break;
+      }
       case IR::OP_LOADCONTEXTINDEXED: {
         auto Op = IROp->C<IR::IROp_LoadContextIndexed>();
         return Op->Class;
@@ -276,6 +281,7 @@ namespace FEXCore::IR {
 
       void AllocateRegisterSet(uint32_t RegisterCount, uint32_t ClassCount) override;
       void AddRegisters(FEXCore::IR::RegisterClassType Class, uint32_t RegisterCount) override;
+      void AddStaticRegisters(FEXCore::IR::RegisterClassType Class, uint32_t RegisterBase, uint32_t RegisterCount) override;
       void AddRegisterConflict(FEXCore::IR::RegisterClassType ClassConflict, uint32_t RegConflict, FEXCore::IR::RegisterClassType Class, uint32_t Reg) override;
       void AllocateRegisterConflicts(FEXCore::IR::RegisterClassType Class, uint32_t NumConflicts) override;
 
@@ -314,6 +320,7 @@ namespace FEXCore::IR {
 
       uint32_t FindNodeToSpill(IREmitter *IREmit, RegisterNode *RegisterNode, uint32_t CurrentLocation, LiveRange const *OpLiveRange, int32_t RematCost = -1);
       uint32_t FindSpillSlot(uint32_t Node, FEXCore::IR::RegisterClassType RegisterClass);
+      uint32_t StaticRegisterBase;
 
       bool RunAllocateVirtualRegisters(IREmitter *IREmit);
   };
@@ -338,6 +345,11 @@ namespace FEXCore::IR {
     AllocateRegisters(Graph, Class, DEFAULT_VIRTUAL_REG_COUNT);
     AllocatePhysicalRegisters(Graph, Class, RegisterCount);
     PhysicalRegisterCount[Class] = RegisterCount;
+  }
+
+
+  void ConstrainedRAPass::AddStaticRegisters(FEXCore::IR::RegisterClassType Class, uint32_t RegisterBase, uint32_t RegisterCount) {
+    StaticRegisterBase = RegisterBase;
   }
 
   void ConstrainedRAPass::AddRegisterConflict(FEXCore::IR::RegisterClassType ClassConflict, uint32_t RegConflict, FEXCore::IR::RegisterClassType Class, uint32_t Reg) {
@@ -402,6 +414,7 @@ namespace FEXCore::IR {
           case IR::OP_CONSTANT: LiveRanges[Node].RematCost = 1; break;
           case IR::OP_LOADFLAG:
           case IR::OP_LOADCONTEXT: LiveRanges[Node].RematCost = 10; break;
+          case IR::OP_LOADREGISTER: LiveRanges[Node].RematCost = -1; break;
           case IR::OP_LOADMEM:
           case IR::OP_LOADMEMTSO:
             LiveRanges[Node].RematCost = 100;

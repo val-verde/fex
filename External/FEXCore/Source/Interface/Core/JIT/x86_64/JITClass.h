@@ -46,6 +46,7 @@ namespace FEXCore::CPU {
 #define TMP4 rdi
 #define TMP5 rbx
 using namespace Xbyak::util;
+const uint32_t StaticRAEntries = 1;
 const std::array<Xbyak::Reg, 9> RA64 = { rsi, r8, r9, r10, r11, rbp, r12, r13, r15 };
 const std::array<std::pair<Xbyak::Reg, Xbyak::Reg>, 4> RA64Pair = {{ {rsi, r8}, {r9, r10}, {r11, rbp}, {r12, r13} }};
 const std::array<Xbyak::Reg, 11> RAXMM = { xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7, xmm8, xmm9, xmm10 };
@@ -84,7 +85,7 @@ private:
   /**
    * @name Register Allocation
    * @{ */
-  constexpr static uint32_t NumGPRs = RA64.size(); // 4 is the minimum required for GPR ops
+  constexpr static uint32_t NumGPRs = RA64.size() - StaticRAEntries; // 4 is the minimum required for GPR ops
   constexpr static uint32_t NumXMMs = RAXMM.size();
   constexpr static uint32_t NumGPRPairs = RA64Pair.size();
   constexpr static uint32_t RegisterCount = NumGPRs + NumXMMs + NumGPRPairs;

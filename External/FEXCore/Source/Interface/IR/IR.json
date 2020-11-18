@@ -442,6 +442,45 @@
       "FixedDestSize": "8"
     },
 
+    "LoadRegister": {
+      "Desc": ["Loads a value from the static-ra context with offset",
+               "Dest = Ctx[Offset]"
+              ],
+      "OpClass": "StaticRA",
+      "HasDest": true,
+      "DestClass": "Complex",
+      "DestSize": "Size",
+      "HelperArgs": [
+        "uint8_t", "Size"
+      ],
+      "Args": [
+        "uint32_t", "Offset",
+        "RegisterClassType", "Class"
+      ]
+    },
+
+    "StoreRegister": {
+      "HasSideEffects": true,
+      "Desc": ["Stores a value to the static-ra context with offset",
+               "Ctx[Offset] = Value",
+               "Zero Extends if value's type is too small",
+               "Truncates if value's type is too large"
+              ],
+      "OpClass": "StaticRA",
+      "SSAArgs": "1",
+      "SSANames": [
+        "Value"
+      ],
+      "DestSize": "Size",
+      "HelperArgs": [
+        "uint8_t", "Size"
+      ],
+      "Args": [
+        "uint32_t", "Offset",
+        "RegisterClassType", "Class"
+      ]
+    },
+
     "LoadContext": {
       "Desc": ["Loads a value from the context with offset",
                "Dest = Ctx[Offset]"

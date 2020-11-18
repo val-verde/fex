@@ -5,11 +5,16 @@
 namespace FEXCore::IR {
 
 void PassManager::AddDefaultPasses(bool InlineConstants) {
+  InsertPass(CreateDeadFlagStoreElimination());
+  InsertPass(CreateDeadGPRStoreElimination());
+  
+  // only do SRA on JIT
+  if (InlineConstants)
+    InsertPass(CreateStaticRegisterAllocationPass());
+
   InsertPass(CreateContextLoadStoreElimination());
   InsertPass(CreateConstProp(InlineConstants));
   ////// InsertPass(CreateDeadFlagCalculationEliminination());
-  InsertPass(CreateDeadFlagStoreElimination());
-  InsertPass(CreateDeadGPRStoreElimination());
   InsertPass(CreateSyscallOptimization());
   InsertPass(CreatePassDeadCodeElimination());
 

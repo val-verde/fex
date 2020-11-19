@@ -478,6 +478,8 @@ bool JITCore::IsInlineConstant(const IR::OrderedNodeWrapper& WNode, uint64_t* Va
   }
 }
 
+uintptr_t lastblock;
+
 void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const *IR, [[maybe_unused]] FEXCore::Core::DebugData *DebugData) {
   JumpTargets.clear();
   uint32_t SSACount = IR->GetSSACount();
@@ -500,6 +502,11 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
   LogMan::Throw::A(RAPass->HasFullRA(), "Needs RA");
 
   SpillSlots = RAPass->SpillSlots();
+
+  mov(rax, (uintptr_t)&lastblock);
+  mov(rcx, rax);
+  mov(rax, getCurr<uintptr_t>());
+  mov(qword[rcx], rax);
 
   if (SpillSlots) {
     sub(rsp, SpillSlots * 16 + 8);
@@ -697,6 +704,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   sub(rsp, 8);
 
   mov(STATE, rdi);
+  FillStaticRegs();
 
   // Save this stack pointer so we can cleanly shutdown the emulation with a long jump
   // regardless of where we were in the stack
@@ -813,6 +821,8 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   {
     // Interpreter fallback helper code
     InterpreterFallbackHelperAddress = getCurr<void*>();
+    SpillStaticRegs();
+
     // This will get called so our stack is now misaligned
     sub(rsp, 8);
     mov(rdi, STATE);
@@ -823,7 +833,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     // Adjust the stack to remove the alignment and also the return address
     // We will have been called from the ASM dispatcher, so we know where we came from
     add(rsp, 16);
-
+    FillStaticRegs();
     jmp(LoopTop);
   }
 
@@ -839,6 +849,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     ThreadPauseHandlerAddress = getCurr<uint64_t>();
     L(ThreadPauseHandler);
 
+    SpillStaticRegs();
     mov(rdi, reinterpret_cast<uintptr_t>(CTX));
     mov(rsi, STATE);
     mov(rax, reinterpret_cast<uint64_t>(SleepThread));
@@ -891,6 +902,18 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   LogMan::Msg::D("Dispatcher : disas %p,%p", DispatchPtr, Exit);
 
   setNewBuffer(InitialCodeBuffer.Ptr, InitialCodeBuffer.Size);
+}
+
+void JITCore::SpillStaticRegs() {
+  for (size_t i = 0; i < SRA64.size(); i++) {
+   mov(qword[STATE + (i + 1) * 8], SRA64[i]);
+  }
+}
+
+void JITCore::FillStaticRegs() {
+  for (size_t i = 0; i < SRA64.size(); i++) {
+   mov(SRA64[i], qword[STATE + (i + 1) * 8]);
+  }
 }
 
 FEXCore::CPU::CPUBackend *CreateJITCore(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadState *Thread) {

@@ -163,7 +163,6 @@ DEF_OP(StoreContext) {
 }
 
 DEF_OP(LoadRegister) {
-  ud2();
   auto Op = IROp->C<IR::IROp_LoadRegister>();
   uint8_t OpSize = IROp->Size;
 
@@ -172,7 +171,9 @@ DEF_OP(LoadRegister) {
   auto regId = Op->Offset / 8 - 1;
   auto regOffs = Op->Offset & 7;
 
-  auto reg = r15;
+  assert(regId < SRA64.size());
+
+  auto reg = SRA64[regId];
 
   switch(Op->Header.Size) {
     case 1:
@@ -192,18 +193,17 @@ DEF_OP(LoadRegister) {
 
     case 4:
       assert(regOffs == 0);
-      movzx(GetDst<RA_32>(Node), reg.cvt32());
+      mov(GetDst<RA_32>(Node), reg.cvt32());
       break;
 
     case 8:
       assert(regOffs == 0);
-      movzx(GetDst<RA_64>(Node), reg.cvt64());
+      mov(GetDst<RA_64>(Node), reg.cvt64());
       break;
   }
 }
 
 DEF_OP(StoreRegister) {
-  ud2();
   auto Op = IROp->C<IR::IROp_StoreRegister>();
   uint8_t OpSize = IROp->Size;
 
@@ -212,7 +212,9 @@ DEF_OP(StoreRegister) {
   auto regId = Op->Offset / 8 - 1;
   auto regOffs = Op->Offset & 7;
   
-  auto reg = r15;
+  assert(regId < SRA64.size());
+
+  auto reg = SRA64[regId];
 
   switch(Op->Header.Size) {
     case 1:
@@ -220,7 +222,8 @@ DEF_OP(StoreRegister) {
 
       if (regOffs) { 
         mov(rax, reg);
-        mov(ah, GetSrc<RA_8>(Op->Value.ID()));
+        mov(cl, GetSrc<RA_8>(Op->Value.ID()));
+        mov(ah, cl);
         mov(reg, rax);
       } else {
         mov(reg.cvt8(), GetSrc<RA_8>(Op->Value.ID()));
@@ -234,7 +237,10 @@ DEF_OP(StoreRegister) {
       
     case 4:
       assert(regOffs == 0);
-      mov(reg.cvt32(), GetSrc<RA_32>(Op->Value.ID()));
+      mov(eax, GetSrc<RA_32>(Op->Value.ID()));
+      mov(ecx, reg.cvt32());
+      sub(reg, rcx);
+      add(reg, rax);
       break;
 
     case 8:

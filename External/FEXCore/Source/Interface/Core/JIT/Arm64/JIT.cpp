@@ -850,6 +850,8 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   // This is passed in to parameter 0 (x0)
   mov(STATE, x0);
 
+  FillStaticRegs();
+
   // Save this stack pointer so we can cleanly shutdown the emulation with a long jump
   // regardless of where we were in the stack
   add(x0, sp, 0);
@@ -998,10 +1000,12 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     Label InterpreterFallback{};
     bind(&InterpreterFallback);
     InterpreterFallbackHelperAddress = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
+    SpillStaticRegs();
     mov(x0, STATE);
     ldr(x1, &l_Interpreter);
 
     blr(x1);
+    FillStaticRegs();
     b(&LoopTop);
   }
 
@@ -1010,6 +1014,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     ThreadPauseHandlerAddress = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
     // We are pausing, this means the frontend should be waiting for this thread to idle
     // We will have faulted and jumped to this location at this point
+    SpillStaticRegs();
 
     // Call our sleep handler
     ldr(x0, &l_CTX);
@@ -1085,6 +1090,18 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   CPU.EnsureIAndDCacheCoherency(reinterpret_cast<void*>(DispatchPtr), CodeEnd - reinterpret_cast<uint64_t>(DispatchPtr));
 
   *GetBuffer() = OriginalBuffer;
+}
+
+void JITCore::SpillStaticRegs() {
+  for (size_t i = 0; i < SRA64.size(); i++) {
+    str(SRA64[i], MemOperand(STATE, (i + 1) * 8));
+  }
+}
+
+void JITCore::FillStaticRegs() {
+  for (size_t i = 0; i < SRA64.size(); i++) {
+    ldr(SRA64[i], MemOperand(STATE, (i + 1) * 8));
+  }
 }
 
 FEXCore::CPU::CPUBackend *CreateJITCore(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadState *Thread) {

@@ -124,6 +124,80 @@ DEF_OP(StoreContext) {
   }
 }
 
+
+DEF_OP(LoadRegister) {
+  auto Op = IROp->C<IR::IROp_LoadRegister>();
+  uint8_t OpSize = IROp->Size;
+
+  assert(Op->Class.Val == 0);
+
+  auto regId = Op->Offset / 8 - 1;
+  auto regOffs = Op->Offset & 7;
+
+  assert(regId < SRA64.size());
+
+  auto reg = SRA64[regId];
+
+  switch(Op->Header.Size) {
+    case 1:
+      assert(regOffs == 0 || regOffs == 1);
+      ubfx(GetReg<RA_64>(Node), reg, regOffs * 8, 8);
+      break;
+
+    case 2:
+      assert(regOffs == 0);
+      ubfx(GetReg<RA_64>(Node), reg, 0, 16);
+      break;
+
+    case 4:
+      assert(regOffs == 0);
+      mov(GetReg<RA_32>(Node), reg.W());
+      break;
+
+    case 8:
+      assert(regOffs == 0);
+      mov(GetReg<RA_64>(Node), reg);
+      break;
+  }
+}
+
+DEF_OP(StoreRegister) {
+  auto Op = IROp->C<IR::IROp_StoreRegister>();
+  uint8_t OpSize = IROp->Size;
+
+  assert(Op->Class.Val == 0);
+
+  auto regId = Op->Offset / 8 - 1;
+  auto regOffs = Op->Offset & 7;
+  
+  assert(regId < SRA64.size());
+
+  auto reg = SRA64[regId];
+
+  switch(Op->Header.Size) {
+    case 1:
+      assert(regOffs == 0 || regOffs == 1);
+      bfi(reg, GetReg<RA_64>(Op->Value.ID()), regOffs * 8, 8);
+      break;
+
+    case 2:
+      assert(regOffs == 0);
+      bfi(reg, GetReg<RA_64>(Op->Value.ID()), 0, 16);
+      break;
+      
+    case 4:
+      assert(regOffs == 0);
+      bfi(reg, GetReg<RA_64>(Op->Value.ID()), 0, 32);
+      break;
+
+    case 8:
+      assert(regOffs == 0);
+      mov(reg, GetReg<RA_64>(Op->Value.ID()));
+      break;
+  }
+}
+
+
 DEF_OP(LoadContextIndexed) {
   auto Op = IROp->C<IR::IROp_LoadContextIndexed>();
   size_t size = Op->Size;
@@ -652,6 +726,8 @@ void JITCore::RegisterMemoryHandlers() {
   REGISTER_OP(STORECONTEXTPAIR,    StoreContextPair);
   REGISTER_OP(LOADCONTEXT,         LoadContext);
   REGISTER_OP(STORECONTEXT,        StoreContext);
+  REGISTER_OP(LOADREGISTER,        LoadRegister);
+  REGISTER_OP(STOREREGISTER,       StoreRegister);
   REGISTER_OP(LOADCONTEXTINDEXED,  LoadContextIndexed);
   REGISTER_OP(STORECONTEXTINDEXED, StoreContextIndexed);
   REGISTER_OP(SPILLREGISTER,       SpillRegister);

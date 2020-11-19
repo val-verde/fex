@@ -29,12 +29,16 @@ namespace FEXCore::CPU {
 using namespace vixl;
 using namespace vixl::aarch64;
 
-const std::array<aarch64::Register, 24> RA64 = {
+const std::array<aarch64::Register, 1> SRA64 = {
+  x27
+};
+
+const std::array<aarch64::Register, 22> RA64 = {
   x4, x5, x6, x7, x8, x9,
   x10, x11, x12, x13, x14, x15,
   x16, x17,
   x18, x19, x20, x21, x22, x23,
-  x24, x25, x26, x27};
+  x24, x25/*, x26, x27*/};
 
 const std::array<std::pair<aarch64::Register, aarch64::Register>, 12> RA64Pair = {{
   {x4, x5},
@@ -48,7 +52,7 @@ const std::array<std::pair<aarch64::Register, aarch64::Register>, 12> RA64Pair =
   {x20, x21},
   {x22, x23},
   {x24, x25},
-  {x26, x27},
+  //{x26, x27},
 }};
 
 const std::array<std::pair<aarch64::Register, aarch64::Register>, 12> RA32Pair = {{
@@ -63,7 +67,7 @@ const std::array<std::pair<aarch64::Register, aarch64::Register>, 12> RA32Pair =
   {w20, w21},
   {w22, w23},
   {w24, w25},
-  {w26, w27},
+  //{w26, w27},
 }};
 
 //  v8..v15 = (lower 64bits) Callee saved
@@ -222,6 +226,9 @@ private:
 
   uint32_t SpillSlots{};
 
+  void SpillStaticRegs();
+  void FillStaticRegs();
+
   using OpHandler = void (JITCore::*)(FEXCore::IR::IROp_Header *IROp, uint32_t Node);
   std::array<OpHandler, FEXCore::IR::IROps::OP_LAST + 1> OpHandlers {};
   void RegisterALUHandlers();
@@ -345,6 +352,8 @@ private:
 
   DEF_OP(LoadContext);
   DEF_OP(StoreContext);
+  DEF_OP(LoadRegister);
+  DEF_OP(StoreRegister);
   DEF_OP(LoadContextIndexed);
   DEF_OP(StoreContextIndexed);
   DEF_OP(SpillRegister);

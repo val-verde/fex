@@ -14,7 +14,7 @@ bool IsStaticAlloc(uint32_t Offset) {
   if (Offset >= 1*8 && Offset < 17*8) {
     auto reg = (Offset/8) - 1;
 
-    return reg == 0; // just RAX
+    return reg < 16; // all 16 regs
   }
 
   return false;
@@ -57,7 +57,7 @@ bool StaticRegisterAllocationPass::Run(IREmitter *IREmit) {
 
               OrderedNode *sraReg = IREmit->_StoreRegister(IREmit->UnwrapNode(Op->Value), Op->Offset, GPRClass, Op->Header.Size);
 
-              IREmit->ReplaceUsesWithAfter(CodeNode, sraReg, CodeNode);
+              IREmit->Remove(CodeNode);
             }
         }
     }

@@ -21,8 +21,11 @@ DEF_OP(GuestReturn) {
 
 DEF_OP(SignalReturn) {
   // First we must reset the stack
-  ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
-  add(sp, TMP1, 0); // Move that supports SP
+  //ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
+  //add(sp, TMP1, 0); // Move that supports SP
+  if (SpillSlots) {
+    add(sp, sp, SpillSlots * 16);
+  }
 
   // Now branch to our signal return helper
   // This can't be a direct branch since the code needs to live at a constant location
@@ -32,9 +35,14 @@ DEF_OP(SignalReturn) {
 
 DEF_OP(CallbackReturn) {
   // First we must reset the stack
-  ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
-  add(sp, TMP1, 0); // Move that supports SP
 
+  //TODO: FIXME
+  //ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
+  //add(sp, TMP1, 0); // Move that supports SP
+  if (SpillSlots) {
+    add(sp, sp, SpillSlots * 16);
+  }
+  
   // We can now lower the ref counter again
   LoadConstant(x0, reinterpret_cast<uint64_t>(&SignalHandlerRefCounter));
   ldr(w2, MemOperand(x0));
@@ -53,9 +61,54 @@ DEF_OP(CallbackReturn) {
 }
 
 DEF_OP(ExitFunction) {
-  ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
-  add(sp, TMP1, 0); // Move that supports SP
-  ret();
+  auto Op = IROp->C<IR::IROp_ExitFunction>();
+
+  if (SpillSlots) {
+    add(sp, sp, SpillSlots * 16);
+  }
+
+  //ldp(TMP1, lr, MemOperand(sp, 16, PostIndex));
+  //add(sp, TMP1, 0); // Move that supports SP
+  //ret();
+
+  aarch64::Label FullLookup;
+
+  uint64_t Const;
+  bool isConst = IsInlineConstant(Op->Header.Args[0], &Const);
+
+  if (isConst) {
+    Literal l_BranchHost{ExitFunctionLinkerAddress};
+    Literal l_BranchGuest{Const};
+
+    ldr(x0, &l_BranchHost);
+    blr(x0);
+    
+    place(&l_BranchHost);
+    place(&l_BranchGuest);
+  }
+  else {
+    auto RipReg = GetReg<RA_64>(Op->Header.Args[0].ID());
+
+    //LoadConstant(x2, 0xDEADBEEF00);
+    //str(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
+
+    //str(RipReg, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
+
+    // L1 Cache
+    LoadConstant(x0, State->BlockCache->GetL1Pointer());
+
+    and_(x3, RipReg, 1 * 1024 * 1024 - 1);
+    add(x0, x0, Operand(x3, Shift::LSL, 4));
+    ldp(x1, x0, MemOperand(x0));
+    cmp(x0, RipReg);
+    b(&FullLookup, Condition::ne);
+    br(x1);
+
+    bind(&FullLookup);
+    mov(x2, RipReg);
+    LoadConstant(x0, AbsoluteFullLookupAddress);
+    br(x0);
+  }
 }
 
 DEF_OP(Jump) {

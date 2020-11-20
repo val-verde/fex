@@ -486,7 +486,17 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
 
   auto HeaderOp = IR->GetHeader();
   if (HeaderOp->ShouldInterpret) {
-    return InterpreterFallbackHelperAddress;
+    void *Entry = getCurr<void*>();
+
+    mov(rax, HeaderOp->Entry);
+    mov(qword [STATE + offsetof(FEXCore::Core::CPUState, rip)], rax);
+
+    mov(rax, (uintptr_t)InterpreterFallbackHelperAddress);
+    jmp(rax);
+
+    ready();
+
+    return Entry;
   }
 
   // Fairly excessive buffer range to make sure we don't overflow
@@ -509,10 +519,7 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
   mov(qword[rcx], rax);
 
   if (SpillSlots) {
-    sub(rsp, SpillSlots * 16 + 8);
-  }
-  else {
-    sub(rsp, 8);
+    sub(rsp, SpillSlots * 16);
   }
 
 #ifdef BLOCKSTATS
@@ -658,6 +665,22 @@ static void SleepThread(FEXCore::Context::Context *ctx, FEXCore::Core::InternalT
   ctx->IdleWaitCV.notify_all();
 }
 
+uint64_t JITCore::ExitFunctionLink(JITCore *core, FEXCore::Core::InternalThreadState *Thread, uint64_t *record) {
+  auto GuestRip = record[1];
+
+  auto HostCode = Thread->BlockCache->FindBlock(GuestRip);
+
+  if (!HostCode) {
+    //printf("ExitFunctionLink: Aborting, %lX not in cache\n", GuestRip);
+    Thread->State.State.rip = GuestRip;
+    return core->AbsoluteLoopTopAddress;
+  }
+
+  //printf("ExitFunctionLink: %lX -> %lX, linked\n", GuestRip, HostCode);
+  record[0] = HostCode;
+  return HostCode;
+}
+
 void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   DispatcherCodeBuffer = AllocateNewCodeBuffer(MAX_DISPATCHER_CODE_SIZE);
   setNewBuffer(DispatcherCodeBuffer.Ptr, DispatcherCodeBuffer.Size);
@@ -712,16 +735,31 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
 
   Label LoopTop;
   Label NoBlock;
+  Label FullLookup;
 
   L(LoopTop);
   AbsoluteLoopTopAddress = getCurr<uint64_t>();
-
   {
-    mov(r13, Thread->BlockCache->GetPagePointer());
-
     // Load our RIP
     mov(rdx, qword [STATE + offsetof(FEXCore::Core::CPUState, rip)]);
 
+    // L1 Cache
+    mov(r13, Thread->BlockCache->GetL1Pointer());
+    mov(rax, rdx);
+
+    and_(rax, 1 * 1024 * 1024 - 1);
+    shl(rax, 4);
+    cmp(qword[r13 + rax + 8], rdx);
+    jne(FullLookup);
+    jmp(qword[r13 + rax + 0]);
+    jmp(LoopTop);
+    
+    L(FullLookup);
+    AbsoluteFullLookupAddress = getCurr<uint64_t>();
+    
+    mov(r13, Thread->BlockCache->GetPagePointer());
+
+    // Full lookup
     mov(rax, rdx);
     mov(rbx, Thread->BlockCache->GetVirtualMemorySize() - 1);
     and_(rax, rbx);
@@ -749,8 +787,16 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     cmp(rax, 0);
     je(NoBlock);
 
+    // Update L1
+    mov(r13, Thread->BlockCache->GetL1Pointer());
+    mov(rcx, rdx);
+    and_(rcx, 1 * 1024 * 1024 - 1);
+    shl(rcx, 1);
+    mov(qword[r13 + rcx*8 + 8], rdx);
+    mov(qword[r13 + rcx*8 + 0], rax);
+    
     // Real block if we made it here
-    call(rax);
+    jmp(rax);
 
     if (CTX->GetGdbServerStatus()) {
       // If we have a gdb server running then run in a less efficient mode that checks if we need to exit
@@ -785,10 +831,25 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     ret();
   }
 
+  {
+    ExitFunctionLinkerAddress = getCurr<uint64_t>();
+    // {rdi, rsi, rdx}
+    mov(rdi, (uintptr_t)this);
+    mov(rsi, STATE);
+    mov(rdx, rax); // rax is set at the block end
+
+    mov(rax, (uintptr_t)&ExitFunctionLink);
+    call(rax);
+    jmp(rax);
+  }
+
   Label FallbackCore;
   // Block creation
   {
     L(NoBlock);
+
+    // Store RIP, just in case
+    mov(qword [STATE + offsetof(FEXCore::Core::CPUState, rip)], rdx);
 
     using ClassPtrType = uintptr_t (FEXCore::Context::Context::*)(FEXCore::Core::InternalThreadState *, uint64_t);
     union PtrCast {
@@ -821,18 +882,14 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   {
     // Interpreter fallback helper code
     InterpreterFallbackHelperAddress = getCurr<void*>();
+    
     SpillStaticRegs();
-
-    // This will get called so our stack is now misaligned
-    sub(rsp, 8);
+    
     mov(rdi, STATE);
     mov(rax, reinterpret_cast<uint64_t>(ThreadState->IntBackend->CompileCode(nullptr, nullptr)));
 
     call(rax);
 
-    // Adjust the stack to remove the alignment and also the return address
-    // We will have been called from the ASM dispatcher, so we know where we came from
-    add(rsp, 16);
     FillStaticRegs();
     jmp(LoopTop);
   }

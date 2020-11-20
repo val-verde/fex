@@ -208,12 +208,19 @@ private:
   void PushCalleeSavedRegisters();
   void PopCalleeSavedRegisters();
 
+  static uint64_t ExitFunctionLink(JITCore *core, FEXCore::Core::InternalThreadState *Thread, uint64_t *record);
+
   /**
    * @name Dispatch Helper functions
    * @{ */
   aarch64::Label LoopTop{};
+  aarch64::Label FullLookup{};
   aarch64::Label Exit{};
+  aarch64::Label ExitFunctionLinker{};
   uint64_t AbsoluteLoopTopAddress{};
+  uint64_t AbsoluteFullLookupAddress{};
+  uint64_t ExitFunctionLinkerAddress{};
+
   uint64_t InterpreterFallbackHelperAddress{};
   uint64_t ThreadPauseHandlerAddress{};
   Label ThreadPauseHandler{};

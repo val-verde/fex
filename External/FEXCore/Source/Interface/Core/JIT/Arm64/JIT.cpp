@@ -591,10 +591,25 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
   using namespace aarch64;
   JumpTargets.clear();
   uint32_t SSACount = IR->GetSSACount();
-
+  auto Buffer = GetBuffer();
+  
   auto HeaderOp = IR->GetHeader();
   if (HeaderOp->ShouldInterpret) {
-    return reinterpret_cast<void*>(InterpreterFallbackHelperAddress);
+    
+    auto Entry = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
+
+    LoadConstant(x0, HeaderOp->Entry);
+    str(x0, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
+    
+    LoadConstant(x0, InterpreterFallbackHelperAddress);
+    br(x0);
+
+    FinalizeCode();
+
+    auto CodeEnd = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
+    CPU.EnsureIAndDCacheCoherency(reinterpret_cast<void*>(Entry), CodeEnd - reinterpret_cast<uint64_t>(Entry));
+
+    return reinterpret_cast<void*>(Entry);
   }
 
   this->IR = IR;
@@ -629,19 +644,14 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
   // X1-X3 = Temp
   // X4-r18 = RA
 
-  auto Buffer = GetBuffer();
   auto Entry = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
 
   //brk(0);
 
   if (SpillSlots) {
-    add(TMP1, sp, 0); // Move that supports SP
+    //add(TMP1, sp, 0); // Move that supports SP
     sub(sp, sp, SpillSlots * 16);
-    stp(TMP1, lr, MemOperand(sp, -16, PreIndex));
-  }
-  else {
-    add(TMP1, sp, 0); // Move that supports SP
-    stp(TMP1, lr, MemOperand(sp, -16, PreIndex));
+    //stp(TMP1, lr, MemOperand(sp, -16, PreIndex));
   }
 
   PendingTargetLabel = nullptr;
@@ -779,6 +789,22 @@ void JITCore::PopCalleeSavedRegisters() {
   }
 }
 
+uint64_t JITCore::ExitFunctionLink(JITCore *core, FEXCore::Core::InternalThreadState *Thread, uint64_t *record) {
+  auto GuestRip = record[1];
+
+  auto HostCode = Thread->BlockCache->FindBlock(GuestRip);
+
+  if (!HostCode) {
+    //printf("ExitFunctionLink: Aborting, %lX not in cache\n", GuestRip);
+    Thread->State.State.rip = GuestRip;
+    return core->AbsoluteLoopTopAddress;
+  }
+
+  //printf("ExitFunctionLink: %lX -> %lX, linked\n", GuestRip, HostCode);
+  record[0] = HostCode;
+  return HostCode;
+}
+
 void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   auto OriginalBuffer = *GetBuffer();
 
@@ -843,6 +869,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
 
   Literal l_CompileBlock {CompileBlockPtr};
   Literal l_CompileFallback {CompileFallbackPtr};
+  Literal l_ExitFunctionLink {(uintptr_t)&ExitFunctionLink};
 
   // Push all the register we need to save
   PushCalleeSavedRegisters();
@@ -872,14 +899,27 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   bind(&LoopTop);
   AbsoluteLoopTopAddress = GetLabelAddress<uint64_t>(&LoopTop);
 
-  // This is the block cache lookup routine
-  // It matches what is going on it BlockCache.h::FindBlock
-  ldr(x0, &l_PagePtr);
-
   // Load in our RIP
   // Don't modify x2 since it contains our RIP once the block doesn't exist
   ldr(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
   auto RipReg = x2;
+
+  // L1 Cache
+  LoadConstant(x0, Thread->BlockCache->GetL1Pointer());
+
+  and_(x3, RipReg, 1 * 1024 * 1024 - 1);
+  add(x0, x0, Operand(x3, Shift::LSL, 4));
+  ldp(x1, x0, MemOperand(x0));
+  cmp(x0, RipReg);
+  b(&FullLookup, Condition::ne);
+  br(x1);
+  
+  bind(&FullLookup);
+  AbsoluteFullLookupAddress = GetLabelAddress<uint64_t>(&FullLookup);
+
+  // This is the block cache lookup routine
+  // It matches what is going on it BlockCache.h::FindBlock
+  ldr(x0, &l_PagePtr);
 
   // Mask the address by the virtual address size so we can check for aliases
   if (__builtin_popcountl(VirtualMemorySize) == 1) {
@@ -914,12 +954,18 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     b(&NoBlock, Condition::ne);
 
     // Now load the actual host block to execute if we can
-    ldr(x0, MemOperand(x0, offsetof(FEXCore::BlockCache::BlockCacheEntry, HostCode)));
-    cbz(x0, &NoBlock);
+    ldr(x3, MemOperand(x0, offsetof(FEXCore::BlockCache::BlockCacheEntry, HostCode)));
+    cbz(x3, &NoBlock);
 
     // If we've made it here then we have a real compiled block
     {
-      blr(x0);
+      // update L1 cache
+      LoadConstant(x0, Thread->BlockCache->GetL1Pointer());
+
+      and_(x1, RipReg, 1 * 1024 * 1024 - 1);
+      add(x0, x0, Operand(x1, Shift::LSL, 4));
+      stp(x3, x2, MemOperand(x0));
+      br(x3);
     }
 
     if (CTX->GetGdbServerStatus()) {
@@ -951,10 +997,25 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     ret();
   }
 
+  {
+    bind(&ExitFunctionLinker);
+    ExitFunctionLinkerAddress = GetLabelAddress<uint64_t>(&ExitFunctionLinker);
+    LoadConstant(x0, (uintptr_t)this);
+    mov(x1, STATE);
+    mov(x2, lr);
+    
+    ldr(x3, &l_ExitFunctionLink);
+    blr(x3);
+    br(x0);
+  }
+
   aarch64::Label FallbackCore;
   // Need to create the block
   {
     bind(&NoBlock);
+
+    // not sure if needed or not, but store RIP to context just in case
+    str(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
 
     ldr(x0, MemOperand(STATE, offsetof(FEXCore::Core::InternalThreadState, CTX)));
     mov(x1, STATE);
@@ -1086,6 +1147,7 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
   place(&l_Sleep);
   place(&l_CompileBlock);
   place(&l_CompileFallback);
+  place(&l_ExitFunctionLink);
 
   FinalizeCode();
   uint64_t CodeEnd = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());

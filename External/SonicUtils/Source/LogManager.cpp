@@ -8,7 +8,7 @@ namespace Throw {
 std::vector<ThrowHandler> Handlers;
 void InstallHandler(ThrowHandler Handler) { Handlers.emplace_back(Handler); }
 
-[[noreturn]] void M(const char *fmt, va_list args) {
+void M(const char *fmt, va_list args) {
   size_t MsgSize = 1024;
   char *Buffer = reinterpret_cast<char*>(alloca(MsgSize));
   size_t Return = vsnprintf(Buffer, MsgSize, fmt, args);

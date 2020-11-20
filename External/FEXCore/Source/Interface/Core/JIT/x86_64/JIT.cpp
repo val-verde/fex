@@ -277,7 +277,8 @@ JITCore::JITCore(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadSt
   RAPass->AddRegisters(FEXCore::IR::GPRClass, NumGPRs);
   RAPass->AddRegisters(FEXCore::IR::FPRClass, NumXMMs);
   RAPass->AddRegisters(FEXCore::IR::GPRPairClass, NumGPRPairs);
-  RAPass->AddRegisters(FEXCore::IR::RegisterClassType { 3 }  /*SRA CLASS*/, SRA64.size());
+  RAPass->AddRegisters(FEXCore::IR::ComplexClass, 1);
+  RAPass->AddRegisters(FEXCore::IR::RegisterClassType { 4 }  /*SRA CLASS*/, SRA64.size());
 
   RAPass->AllocateRegisterConflicts(FEXCore::IR::GPRClass, NumGPRs);
   RAPass->AllocateRegisterConflicts(FEXCore::IR::GPRPairClass, NumGPRs);

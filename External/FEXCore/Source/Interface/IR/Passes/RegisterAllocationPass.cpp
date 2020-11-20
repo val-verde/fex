@@ -8,7 +8,7 @@
 namespace {
   constexpr uint32_t INVALID_REG = ~0U;
   constexpr uint64_t INVALID_REGCLASS = ~0ULL;
-  constexpr uint64_t SRA_REGCLASS = 3;
+  constexpr uint64_t SRA_REGCLASS = 4;
   constexpr uint32_t DEFAULT_INTERFERENCE_LIST_COUNT = 128;
   constexpr uint32_t DEFAULT_NODE_COUNT = 8192;
   constexpr uint32_t DEFAULT_VIRTUAL_REG_COUNT = 1024;
@@ -57,6 +57,7 @@ namespace {
     uint32_t End;
     uint32_t RematCost;
     int32_t PrefferedRegister;
+    bool Written;
   };
 
   struct SpillStackUnit {
@@ -226,7 +227,7 @@ namespace {
       }
       case IR::OP_LOADREGISTER: {
         auto Op = IROp->C<IR::IROp_LoadRegister>();
-        return FEXCore::IR::RegisterClassType{SRA_REGCLASS};
+        return Op->Class;
         break;
       }
       case IR::OP_LOADCONTEXTINDEXED: {
@@ -395,7 +396,10 @@ namespace FEXCore::IR {
     if (Nodes > LiveRanges.size()) {
       LiveRanges.resize(Nodes);
     }
-    LiveRanges.assign(Nodes * sizeof(LiveRange), {~0U, ~0U, 0, -1});
+    LiveRanges.assign(Nodes * sizeof(LiveRange), {~0U, ~0U, 0, -1, false});
+
+    LiveRange* StaticMaps[PhysicalRegisterCount[SRA_REGCLASS]];
+    memset(StaticMaps, 0, PhysicalRegisterCount[SRA_REGCLASS] * sizeof(LiveRange*));
 
     constexpr uint32_t DEFAULT_REMAT_COST = 1000;
     for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
@@ -413,11 +417,25 @@ namespace FEXCore::IR {
           if (IROp->Op == OP_LOADREGISTER) {
             auto Op = IROp->C<IR::IROp_LoadRegister>();
 
-            if (IROp->Size >= 4) {
-              int vreg = (int)(Op->Offset / 8);
-              LiveRanges[Node].PrefferedRegister = vreg - 1; //0, 1, and so on
+            assert(LiveRanges[Node].PrefferedRegister  == -1);
+            if (IROp->Size == 8) {
+              int vreg = (int)(Op->Offset / 8) - 1;
+              LiveRanges[Node].PrefferedRegister = vreg; //0, 1, and so on
+              StaticMaps[vreg] = &LiveRanges[Node];
+              SetNodeClass(Graph, Node, IR::RegisterClassType { SRA_REGCLASS });
             }
           }
+        }
+
+        if (IROp->Op == OP_STOREREGISTER) {
+          auto Op = IROp->C<IR::IROp_StoreRegister>();
+          int vreg = (int)(Op->Offset / 8) - 1;
+
+          if (StaticMaps[vreg]) {
+            StaticMaps[vreg]->Written = true;
+          }
+
+          //LiveRanges[Op->Value.ID()].PrefferedRegister = vreg;
         }
 
         // Calculate remat cost
@@ -445,6 +463,13 @@ namespace FEXCore::IR {
           if (IR->GetOp<IROp_Header>(IROp->Args[i])->Op == OP_INLINECONSTANT) continue;
           uint32_t ArgNode = IROp->Args[i].ID();
           LogMan::Throw::A(LiveRanges[ArgNode].Begin != ~0U, "%%ssa%d used by %%ssa%d before defined?", ArgNode, Node);
+
+          // ACCESSED after write, let's not SRA this one
+          if (LiveRanges[ArgNode].Written) {
+            LiveRanges[ArgNode].PrefferedRegister = -1;
+            auto ArgNodeNode = IR->GetNode(IROp->Args[i]);
+            SetNodeClass(Graph, ArgNode, GetRegClassFromNode(IR, ArgNodeNode->Op(IR->GetData())));
+          }
 
           auto ArgNodeBlockID = Graph->Nodes[ArgNode].Head.BlockID;
           if ( ArgNodeBlockID== BlockNodeID) {

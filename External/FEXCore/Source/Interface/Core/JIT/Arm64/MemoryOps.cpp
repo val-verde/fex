@@ -156,7 +156,8 @@ DEF_OP(LoadRegister) {
 
     case 8:
       assert(regOffs == 0);
-      mov(GetReg<RA_64>(Node), reg);
+      if (GetReg<RA_64>(Node).GetCode() != reg.GetCode())
+        mov(GetReg<RA_64>(Node), reg);
       break;
   }
 }

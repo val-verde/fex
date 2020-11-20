@@ -409,7 +409,8 @@ JITCore::JITCore(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadSt
   RAPass->AddRegisters(FEXCore::IR::GPRClass, NumUsedGPRs);
   RAPass->AddRegisters(FEXCore::IR::FPRClass, NumFPRs);
   RAPass->AddRegisters(FEXCore::IR::GPRPairClass, NumUsedGPRPairs);
-  RAPass->AddRegisters(FEXCore::IR::RegisterClassType { 3 }  /*SRA CLASS*/, SRA64.size());
+  RAPass->AddRegisters(FEXCore::IR::ComplexClass, 1);
+  RAPass->AddRegisters(FEXCore::IR::RegisterClassType { 4 }  /*SRA CLASS*/, SRA64.size());
 
   RAPass->AllocateRegisterConflicts(FEXCore::IR::GPRClass, NumUsedGPRs);
   RAPass->AllocateRegisterConflicts(FEXCore::IR::GPRPairClass, NumUsedGPRs);
@@ -581,7 +582,7 @@ aarch64::VRegister JITCore::GetSrc(uint32_t Node) {
 }
 
 aarch64::VRegister JITCore::GetDst(uint32_t Node) {
-  uint32_t Reg = GetPhys(RAPass, Node).VId;
+  uint32_t Reg = GetPhys(RAPass, Node).VId  ;
   return RAFPR[Reg];
 }
 

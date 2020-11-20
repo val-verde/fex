@@ -35,7 +35,7 @@ const std::array<aarch64::Register, 10> SRA64 = {
   x27, x29
 };
 
-const std::array<aarch64::Register, 25> RA64 = {
+const std::array<aarch64::Register, 15> RA64 = {
   x4, x5, x6, x7, x8, x9, x10, x11,
   x12, x13, x14, x15, x16, x17, x18,
 };
@@ -125,7 +125,7 @@ private:
   constexpr static uint32_t NumCalleeGPRs = 10;
   constexpr static uint32_t NumCalleeGPRPairs = 5;
   constexpr static uint32_t RegisterCount = NumGPRs + NumFPRs + NumGPRPairs;
-  constexpr static uint32_t RegisterClasses = 4;
+  constexpr static uint32_t RegisterClasses = 5;
 
   constexpr static uint64_t GPRBase = (0ULL << 32);
   constexpr static uint64_t FPRBase = (1ULL << 32);

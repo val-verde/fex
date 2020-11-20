@@ -15,7 +15,11 @@ bool IsStaticAlloc(uint32_t Offset) {
   if (Offset >= 1*8 && Offset < 17*8) {
     auto reg = (Offset/8) - 1;
 
+#ifdef _M_X86_64
+    rv = reg < 1; // RAX -> 1 in total
+#else
     rv = reg < 10; // 0..9 -> 10 in total
+#endif
   }
 
   return rv;

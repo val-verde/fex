@@ -5,6 +5,8 @@
 
 #include <iterator>
 
+#define SRA_DEBUG(...) // printf(__VA_ARGS__)
+
 namespace {
   constexpr uint32_t INVALID_REG = ~0U;
   constexpr uint64_t INVALID_REGCLASS = ~0ULL;
@@ -58,6 +60,7 @@ namespace {
     uint32_t RematCost;
     int32_t PrefferedRegister;
     bool Written;
+    bool PreWritten;
   };
 
   struct SpillStackUnit {
@@ -396,12 +399,33 @@ namespace FEXCore::IR {
     if (Nodes > LiveRanges.size()) {
       LiveRanges.resize(Nodes);
     }
-    LiveRanges.assign(Nodes * sizeof(LiveRange), {~0U, ~0U, 0, -1, false});
+    LiveRanges.assign(Nodes * sizeof(LiveRange), {~0U, ~0U, 0, -1, false, false});
 
     LiveRange* StaticMaps[PhysicalRegisterCount[SRA_REGCLASS]];
     memset(StaticMaps, 0, PhysicalRegisterCount[SRA_REGCLASS] * sizeof(LiveRange*));
 
     constexpr uint32_t DEFAULT_REMAT_COST = 1000;
+
+    // do a pass to set writen IDs
+    for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
+      uint32_t BlockNodeID = IR->GetID(BlockNode);
+      for (auto [CodeNode, IROp] : IR->GetCode(BlockNode)) {
+        uint32_t Node = IR->GetID(CodeNode);
+        if (IROp->Op == OP_STOREREGISTER) {
+          auto Op = IROp->C<IR::IROp_StoreRegister>();
+          int vreg = (int)(Op->Offset / 8) - 1;
+
+          if (IROp->Size == 8 && LiveRanges[Op->Value.ID()].PrefferedRegister == -1) {
+            //pre-write and sra-allocate in the defining node - this might be undone if a read before the actual store happens
+            SRA_DEBUG("Prewritting ssa%d (Store in ssa%d)\n", Op->Value.ID(), Node);
+            LiveRanges[Op->Value.ID()].PrefferedRegister = vreg;
+            LiveRanges[Op->Value.ID()].PreWritten = true;
+            SetNodeClass(Graph, Op->Value.ID(), IR::RegisterClassType { SRA_REGCLASS });
+          }
+        }
+      }
+    }
+
     for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
       uint32_t BlockNodeID = IR->GetID(BlockNode);
       for (auto [CodeNode, IROp] : IR->GetCode(BlockNode)) {
@@ -413,37 +437,15 @@ namespace FEXCore::IR {
           LiveRanges[Node].Begin = Node;
           // Default to ending right where it starts
           LiveRanges[Node].End = Node;
-
-          if (IROp->Op == OP_LOADREGISTER) {
-            auto Op = IROp->C<IR::IROp_LoadRegister>();
-
-            assert(LiveRanges[Node].PrefferedRegister  == -1);
-            if (IROp->Size == 8) {
-              int vreg = (int)(Op->Offset / 8) - 1;
-              LiveRanges[Node].PrefferedRegister = vreg; //0, 1, and so on
-              StaticMaps[vreg] = &LiveRanges[Node];
-              SetNodeClass(Graph, Node, IR::RegisterClassType { SRA_REGCLASS });
-            }
-          }
         }
 
-        if (IROp->Op == OP_STOREREGISTER) {
-          auto Op = IROp->C<IR::IROp_StoreRegister>();
-          int vreg = (int)(Op->Offset / 8) - 1;
-
-          if (StaticMaps[vreg]) {
-            StaticMaps[vreg]->Written = true;
-          }
-
-          //LiveRanges[Op->Value.ID()].PrefferedRegister = vreg;
-        }
 
         // Calculate remat cost
         switch (IROp->Op) {
           case IR::OP_CONSTANT: LiveRanges[Node].RematCost = 1; break;
           case IR::OP_LOADFLAG:
           case IR::OP_LOADCONTEXT: LiveRanges[Node].RematCost = 10; break;
-          case IR::OP_LOADREGISTER: LiveRanges[Node].RematCost = -1; break;
+          case IR::OP_LOADREGISTER: LiveRanges[Node].RematCost = 1; break;
           case IR::OP_LOADMEM:
           case IR::OP_LOADMEMTSO:
             LiveRanges[Node].RematCost = 100;
@@ -466,6 +468,7 @@ namespace FEXCore::IR {
 
           // ACCESSED after write, let's not SRA this one
           if (LiveRanges[ArgNode].Written) {
+            SRA_DEBUG("Demoting ssa%d because accessed after write in ssa%d\n", ArgNode, Node);
             LiveRanges[ArgNode].PrefferedRegister = -1;
             auto ArgNodeNode = IR->GetNode(IROp->Args[i]);
             SetNodeClass(Graph, ArgNode, GetRegClassFromNode(IR, ArgNodeNode->Op(IR->GetData())));
@@ -486,6 +489,63 @@ namespace FEXCore::IR {
             // Include any blocks this value passes through in the live range
             RecursiveLiveRangeExpansion(IR, ArgNode, ArgNodeBlockID, &LiveRanges[ArgNode], Graph->BlockPredecessors[BlockNodeID], Graph->VisitedNodePredecessors[ArgNode]);
           }
+        }
+
+
+        if (IROp->HasDest) {
+          if (LiveRanges[Node].PrefferedRegister  != -1) {
+            SRA_DEBUG("ssa%d is a pre-write\n", Node);
+            auto vreg = LiveRanges[Node].PrefferedRegister;
+            if (StaticMaps[vreg]) {
+              SRA_DEBUG("Markng ssa%ld as written because ssa%d writes to sra%d\n", StaticMaps[vreg] - &LiveRanges[0], Node, vreg);
+              StaticMaps[vreg]->Written = true;
+            }
+            StaticMaps[vreg] = &LiveRanges[Node];
+          }
+
+          if (IROp->Op == OP_LOADREGISTER) {
+            auto Op = IROp->C<IR::IROp_LoadRegister>();
+            int vreg = (int)(Op->Offset / 8) - 1;
+
+            // Make sure there wasn't a store pre-written before this read
+            if (StaticMaps[vreg] && StaticMaps[vreg]->PreWritten) {
+              uint32_t ID = StaticMaps[vreg] - &LiveRanges[0];
+
+              SRA_DEBUG("ssa%d cannot be a pre-write because ssa%d reads from sra%d before storereg", ID, Node, vreg);
+              StaticMaps[vreg]->PrefferedRegister = -1;
+              StaticMaps[vreg]->PreWritten = false;
+              SetNodeClass(Graph, ID, IR::GPRClass);
+            }
+
+            // if not sra-allocated and full size, sra-allocate
+            if (LiveRanges[Node].PrefferedRegister  == -1 && IROp->Size == 8) {
+              LiveRanges[Node].PrefferedRegister = vreg; //0, 1, and so on
+              StaticMaps[vreg] = &LiveRanges[Node];
+              SetNodeClass(Graph, Node, IR::RegisterClassType { SRA_REGCLASS });
+              SRA_DEBUG("Marking ssa%d as allocated to sra%d\n", Node, vreg);
+            }
+          }
+        }
+
+        if (IROp->Op == OP_STOREREGISTER) {
+          auto Op = IROp->C<IR::IROp_StoreRegister>();
+          int vreg = (int)(Op->Offset / 8) - 1;
+
+          // if a read pending, it has been writting
+          if (StaticMaps[vreg]) {
+            uint32_t ID  = StaticMaps[vreg] - &LiveRanges[0];
+            // writes to self don't invalidate the span
+            if (ID != Op->Value.ID()) {
+              SRA_DEBUG("Markng ssa%d as written because ssa%d writes to sra%d\n", ID, Node, vreg);
+              StaticMaps[vreg]->Written = true;
+            }
+          }
+
+          // no longer pre-written
+          LiveRanges[Op->Value.ID()].PreWritten = false;
+          SRA_DEBUG("Markng ssa%d as no longer pre-written as ssa%d is a storereg for sra%d\n", Op->Value.ID(), Node, vreg);
+
+          //LiveRanges[Op->Value.ID()].PrefferedRegister = vreg;
         }
 
         if (IROp->Op == IR::OP_PHI) {

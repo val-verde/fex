@@ -193,7 +193,8 @@ DEF_OP(StoreRegister) {
 
     case 8:
       assert(regOffs == 0);
-      mov(reg, GetReg<RA_64>(Op->Value.ID()));
+      if (GetReg<RA_64>(Op->Value.ID()).GetCode() != reg.GetCode())
+        mov(reg, GetReg<RA_64>(Op->Value.ID()));
       break;
   }
 }

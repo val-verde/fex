@@ -445,7 +445,7 @@ namespace FEXCore::IR {
           case IR::OP_CONSTANT: LiveRanges[Node].RematCost = 1; break;
           case IR::OP_LOADFLAG:
           case IR::OP_LOADCONTEXT: LiveRanges[Node].RematCost = 10; break;
-          case IR::OP_LOADREGISTER: LiveRanges[Node].RematCost = 1; break;
+          case IR::OP_LOADREGISTER: LiveRanges[Node].RematCost = 10; break;
           case IR::OP_LOADMEM:
           case IR::OP_LOADMEMTSO:
             LiveRanges[Node].RematCost = 100;

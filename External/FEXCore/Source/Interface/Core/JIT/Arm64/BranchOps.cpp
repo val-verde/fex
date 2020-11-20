@@ -222,8 +222,10 @@ DEF_OP(Syscall) {
   mov(x1, STATE);
   mov(x2, sp);
 
+  SpillStaticRegs();
   LoadConstant(x3, reinterpret_cast<uint64_t>(FEXCore::HandleSyscall));
   blr(x3);
+  FillStaticRegs();
 
   // Result is now in x0
   // Fix the stack and any values that were stepped on

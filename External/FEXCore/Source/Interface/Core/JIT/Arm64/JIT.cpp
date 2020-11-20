@@ -632,6 +632,8 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
   auto Buffer = GetBuffer();
   auto Entry = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());
 
+  //brk(0);
+
   if (SpillSlots) {
     add(TMP1, sp, 0); // Move that supports SP
     sub(sp, sp, SpillSlots * 16);

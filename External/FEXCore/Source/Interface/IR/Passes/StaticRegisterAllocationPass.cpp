@@ -11,13 +11,14 @@ public:
 };
 
 bool IsStaticAlloc(uint32_t Offset) {
+  bool rv = false;
   if (Offset >= 1*8 && Offset < 17*8) {
     auto reg = (Offset/8) - 1;
 
-    return reg < 16; // all 16 regs
+    rv = reg < 10; // 0..9 -> 10 in total
   }
 
-  return false;
+  return rv;
 }
 /**
  * @brief This is a temporary pass to detect simple multiblock dead GPR stores
@@ -38,9 +39,8 @@ bool StaticRegisterAllocationPass::Run(IREmitter *IREmit) {
 
   for (auto [BlockNode, BlockIROp] : CurrentIR.GetBlocks()) {
       for (auto [CodeNode, IROp] : CurrentIR.GetCode(BlockNode)) {
-
         IREmit->SetWriteCursor(CodeNode);
-
+        
         if (IROp->Op == OP_LOADCONTEXT) {
             auto Op = IROp->CW<IR::IROp_LoadContext>();
 
@@ -48,7 +48,7 @@ bool StaticRegisterAllocationPass::Run(IREmitter *IREmit) {
 
               OrderedNode *sraReg = IREmit->_LoadRegister(Op->Offset, GPRClass, Op->Header.Size);
 
-              IREmit->ReplaceUsesWithAfter(CodeNode, sraReg, CodeNode);
+              IREmit->ReplaceAllUsesWith(CodeNode, sraReg);
             }
         } if (IROp->Op == OP_STORECONTEXT) {
             auto Op = IROp->CW<IR::IROp_StoreContext>();
@@ -61,9 +61,9 @@ bool StaticRegisterAllocationPass::Run(IREmitter *IREmit) {
             }
         }
     }
-
-    return true;
   }
+
+  return true;
 }
 
 FEXCore::IR::Pass* CreateStaticRegisterAllocationPass() {

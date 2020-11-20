@@ -409,6 +409,7 @@ JITCore::JITCore(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadSt
   RAPass->AddRegisters(FEXCore::IR::GPRClass, NumUsedGPRs);
   RAPass->AddRegisters(FEXCore::IR::FPRClass, NumFPRs);
   RAPass->AddRegisters(FEXCore::IR::GPRPairClass, NumUsedGPRPairs);
+  RAPass->AddRegisters(FEXCore::IR::RegisterClassType { 4 }  /*SRA CLASS*/, SRA64.size());
 
   RAPass->AllocateRegisterConflicts(FEXCore::IR::GPRClass, NumUsedGPRs);
   RAPass->AllocateRegisterConflicts(FEXCore::IR::GPRPairClass, NumUsedGPRs);
@@ -528,48 +529,59 @@ void JITCore::LoadConstant(vixl::aarch64::Register Reg, uint64_t Constant) {
   }
 }
 
-static uint32_t GetPhys(IR::RegisterAllocationPass *RAPass, uint32_t Node) {
-  uint64_t Reg = RAPass->GetNodeRegister(Node);
+struct PhysReg { uint32_t Class; uint32_t VId; };
 
-  if ((uint32_t)Reg != ~0U)
-    return Reg;
+static PhysReg GetPhys(IR::RegisterAllocationPass *RAPass, uint32_t Node) {
+  uint64_t Reg = RAPass->GetNodeRegister(Node);
+  auto rv = PhysReg {uint32_t(Reg>>32), (uint32_t)Reg};
+
+  if (rv.VId != ~0U)
+    return rv;
   else
     LogMan::Msg::A("Couldn't Allocate register for node: ssa%d. Class: %d", Node, Reg >> 32);
 
-  return ~0U;
+  return PhysReg { ~0U, ~0U};
 }
 
 template<>
 aarch64::Register JITCore::GetReg<JITCore::RA_32>(uint32_t Node) {
-  uint32_t Reg = GetPhys(RAPass, Node);
-  return RA64[Reg].W();
+  auto Reg = GetPhys(RAPass, Node);
+  if (Reg.Class == 4) {
+    return SRA64[Reg.VId].W();
+  } else {
+    return RA64[Reg.VId].W();
+  }
 }
 
 template<>
 aarch64::Register JITCore::GetReg<JITCore::RA_64>(uint32_t Node) {
-  uint32_t Reg = GetPhys(RAPass, Node);
-  return RA64[Reg];
+  auto Reg = GetPhys(RAPass, Node);
+  if (Reg.Class == 4) {
+    return SRA64[Reg.VId];
+  } else {
+    return RA64[Reg.VId];
+  }
 }
 
 template<>
 std::pair<aarch64::Register, aarch64::Register> JITCore::GetSrcPair<JITCore::RA_32>(uint32_t Node) {
-  uint32_t Reg = GetPhys(RAPass, Node);
+  uint32_t Reg = GetPhys(RAPass, Node).VId;
   return RA32Pair[Reg];
 }
 
 template<>
 std::pair<aarch64::Register, aarch64::Register> JITCore::GetSrcPair<JITCore::RA_64>(uint32_t Node) {
-  uint32_t Reg = GetPhys(RAPass, Node);
+  uint32_t Reg = GetPhys(RAPass, Node).VId;
   return RA64Pair[Reg];
 }
 
 aarch64::VRegister JITCore::GetSrc(uint32_t Node) {
-  uint32_t Reg = GetPhys(RAPass, Node);
+  uint32_t Reg = GetPhys(RAPass, Node).VId;
   return RAFPR[Reg];
 }
 
 aarch64::VRegister JITCore::GetDst(uint32_t Node) {
-  uint32_t Reg = GetPhys(RAPass, Node);
+  uint32_t Reg = GetPhys(RAPass, Node).VId;
   return RAFPR[Reg];
 }
 

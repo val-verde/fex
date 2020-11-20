@@ -8,6 +8,7 @@
 namespace {
   constexpr uint32_t INVALID_REG = ~0U;
   constexpr uint64_t INVALID_REGCLASS = ~0ULL;
+  constexpr uint64_t SRA_REGCLASS = 3;
   constexpr uint32_t DEFAULT_INTERFERENCE_LIST_COUNT = 128;
   constexpr uint32_t DEFAULT_NODE_COUNT = 8192;
   constexpr uint32_t DEFAULT_VIRTUAL_REG_COUNT = 1024;
@@ -55,6 +56,7 @@ namespace {
     uint32_t Begin;
     uint32_t End;
     uint32_t RematCost;
+    int32_t PrefferedRegister;
   };
 
   struct SpillStackUnit {
@@ -224,7 +226,7 @@ namespace {
       }
       case IR::OP_LOADREGISTER: {
         auto Op = IROp->C<IR::IROp_LoadRegister>();
-        return Op->Class;
+        return FEXCore::IR::RegisterClassType{SRA_REGCLASS};
         break;
       }
       case IR::OP_LOADCONTEXTINDEXED: {
@@ -393,7 +395,7 @@ namespace FEXCore::IR {
     if (Nodes > LiveRanges.size()) {
       LiveRanges.resize(Nodes);
     }
-    LiveRanges.assign(Nodes * sizeof(LiveRange), {~0U, ~0U});
+    LiveRanges.assign(Nodes * sizeof(LiveRange), {~0U, ~0U, 0, -1});
 
     constexpr uint32_t DEFAULT_REMAT_COST = 1000;
     for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
@@ -407,6 +409,15 @@ namespace FEXCore::IR {
           LiveRanges[Node].Begin = Node;
           // Default to ending right where it starts
           LiveRanges[Node].End = Node;
+
+          if (IROp->Op == OP_LOADREGISTER) {
+            auto Op = IROp->C<IR::IROp_LoadRegister>();
+
+            if (IROp->Size >= 4) {
+              int vreg = (int)(Op->Offset / 8);
+              LiveRanges[Node].PrefferedRegister = vreg - 1; //0, 1, and so on
+            }
+          }
         }
 
         // Calculate remat cost
@@ -590,9 +601,12 @@ namespace FEXCore::IR {
       if (CurrentNode->Head.RegAndClass == INVALID_REGCLASS)
         continue;
 
+      auto LiveRange = &LiveRanges[i];
+
       FEXCore::IR::RegisterClassType RegClass = FEXCore::IR::RegisterClassType{uint32_t(CurrentNode->Head.RegAndClass >> 32)};
       uint64_t RegAndClass = ~0ULL;
       RegisterClass *RAClass = &Graph->Set.Classes[RegClass];
+
       if (CurrentNode->Head.PhiPartner) {
         // In the case that we have a list of nodes that need the same register allocated we need to do something special
         // We need to gather the data from the forward linked list and make sure they all match the virtual register
@@ -625,11 +639,16 @@ namespace FEXCore::IR {
         }
       }
       else {
-        for (uint32_t ri = 0; ri < RAClass->Count; ++ri) {
-          uint64_t RegisterToCheck = (static_cast<uint64_t>(RegClass) << 32) + ri;
-          if (!DoesNodeInterfereWithRegister(Graph, CurrentNode, RegisterToCheck)) {
-            RegAndClass = RegisterToCheck;
-            break;
+
+        if (LiveRange->PrefferedRegister != -1) {
+          RegAndClass = (static_cast<uint64_t>(SRA_REGCLASS) << 32) + LiveRange->PrefferedRegister;
+        } else {
+          for (uint32_t ri = 0; ri < RAClass->Count; ++ri) {
+            uint64_t RegisterToCheck = (static_cast<uint64_t>(RegClass) << 32) + ri;
+            if (!DoesNodeInterfereWithRegister(Graph, CurrentNode, RegisterToCheck)) {
+              RegAndClass = RegisterToCheck;
+              break;
+            }
           }
         }
 

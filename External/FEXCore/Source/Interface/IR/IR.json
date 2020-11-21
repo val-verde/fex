@@ -424,6 +424,22 @@
       ]
     },
 
+    "WeakRef": {
+      "OpClass": "Misc",
+      "HasDest": true,
+      "DestClass": "Complex",
+      "DestSize": "0",
+      "SSAArgs": "3",
+      "SSANames": [
+        "Ref",
+        "Weak",
+        "Strong"
+      ],
+      "Args": [
+        "uint32_t", "EliminationRefCount"
+      ]
+    },
+
     "Mov": {
       "OpClass": "Moves",
       "HasDest": true,

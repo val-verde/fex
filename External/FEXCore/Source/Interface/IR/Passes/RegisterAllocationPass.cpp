@@ -416,7 +416,7 @@ namespace FEXCore::IR {
           auto Op = IROp->C<IR::IROp_StoreRegister>();
           int vreg = (int)(Op->Offset / 8) - 1;
 
-          if (false && IROp->Size == 8 && LiveRanges[Op->Value.ID()].PrefferedRegister == -1) {
+          if (IROp->Size == 8 && LiveRanges[Op->Value.ID()].PrefferedRegister == -1) {
             //pre-write and sra-allocate in the defining node - this might be undone if a read before the actual store happens
             SRA_DEBUG("Prewritting ssa%d (Store in ssa%d)\n", Op->Value.ID(), Node);
             LiveRanges[Op->Value.ID()].PrefferedRegister = vreg;
@@ -503,7 +503,7 @@ namespace FEXCore::IR {
 
         if (IROp->HasDest) {
           if (LiveRanges[Node].PrefferedRegister  != -1) {
-            assert(false);
+            //assert(false);
             SRA_DEBUG("ssa%d is a pre-write\n", Node);
             auto vreg = LiveRanges[Node].PrefferedRegister;
             if (StaticMaps[vreg]) {
@@ -537,7 +537,7 @@ namespace FEXCore::IR {
                 SRA_DEBUG("Marking ssa%d as allocated to sra%d\n", Node, vreg);
               }
             } else {
-              assert(false);
+              //assert(false);
             }
           }
         }
@@ -1089,7 +1089,7 @@ namespace FEXCore::IR {
           bool NeedsToSpill = (uint32_t)CurrentNode->Head.RegAndClass >= PhysicalRegisterCount.at(RegClass);
       
           if (NeedsToSpill) {
-            printf("SPILL Class: %d %lX, %x\n", RegClass, CurrentNode->Head.RegAndClass, PhysicalRegisterCount.at(RegClass));
+            //printf("SPILL Class: %d %lX, %x\n", RegClass, CurrentNode->Head.RegAndClass, PhysicalRegisterCount.at(RegClass));
             bool Spilled = false;
 
             // First let's just check for constants that we can just rematerialize instead of spilling

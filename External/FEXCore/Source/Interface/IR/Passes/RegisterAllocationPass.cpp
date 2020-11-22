@@ -169,6 +169,7 @@ namespace {
         Graph->Nodes[i].Head = DefaultNodeHeader;
       }
     }
+    Graph->VisitedNodePredecessors.clear();
   }
 
   void SetNodeClass(RegisterGraph *Graph, uint32_t Node, FEXCore::IR::RegisterClassType Class) {
@@ -843,6 +844,9 @@ namespace FEXCore::IR {
           continue;
         }
 
+        //if ((RegisterNode->Head.RegAndClass>>32) != (InterferenceNode->Head.RegAndClass>>32))
+        //  continue;
+
         // If this node's live range fully encompasses the live range of the interference node
         // then spilling that interference node will not lower RA
         // | Our Node             |        Interference |
@@ -1070,8 +1074,9 @@ namespace FEXCore::IR {
           // that is cheapest
           FEXCore::IR::RegisterClassType RegClass = FEXCore::IR::RegisterClassType{uint32_t(CurrentNode->Head.RegAndClass >> 32)};
           bool NeedsToSpill = (uint32_t)CurrentNode->Head.RegAndClass >= PhysicalRegisterCount.at(RegClass);
-
+      
           if (NeedsToSpill) {
+            printf("SPILL Class: %d %lX, %x\n", RegClass, CurrentNode->Head.RegAndClass, PhysicalRegisterCount.at(RegClass));
             bool Spilled = false;
 
             // First let's just check for constants that we can just rematerialize instead of spilling
@@ -1106,6 +1111,7 @@ namespace FEXCore::IR {
                 LogMan::Throw::A((InterferenceRegisterNode->Head.RegAndClass & ~0U) != ~0U, "Interference node never assigned a register?");
                 LogMan::Throw::A(InterferenceRegClass != ~0U, "Interference node never assigned a register class?");
                 LogMan::Throw::A(InterferenceRegisterNode->Head.PhiPartner == nullptr, "We don't support spilling PHI nodes currently");
+                LogMan::Throw::A(InterferenceRegClass == RegClass, "Class doesn't match");
 
                 // This is the op that we need to dump
                 auto [InterferenceOrderedNode, InterferenceIROp] = IR.at(InterferenceNode)();
@@ -1238,6 +1244,10 @@ namespace FEXCore::IR {
         // Virtual registers fit completely within physical registers
         // Remap virtual 1:1 to physical
         HadFullRA &= TopRAPressure[i] < PhysicalRegisterCount[i];
+      }
+      
+      if (TopRAPressure[SRA_REGCLASS] >= PhysicalRegisterCount[SRA_REGCLASS]) {
+        printf("SRA spill!? %d %d\n", TopRAPressure[SRA_REGCLASS], PhysicalRegisterCount[SRA_REGCLASS]);
       }
 
       if (HadFullRA) {

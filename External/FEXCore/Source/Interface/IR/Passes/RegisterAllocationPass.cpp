@@ -415,7 +415,7 @@ namespace FEXCore::IR {
           auto Op = IROp->C<IR::IROp_StoreRegister>();
           int vreg = (int)(Op->Offset / 8) - 1;
 
-          if (IROp->Size == 8 && LiveRanges[Op->Value.ID()].PrefferedRegister == -1) {
+          if (false && IROp->Size == 8 && LiveRanges[Op->Value.ID()].PrefferedRegister == -1) {
             //pre-write and sra-allocate in the defining node - this might be undone if a read before the actual store happens
             SRA_DEBUG("Prewritting ssa%d (Store in ssa%d)\n", Op->Value.ID(), Node);
             LiveRanges[Op->Value.ID()].PrefferedRegister = vreg;
@@ -428,6 +428,7 @@ namespace FEXCore::IR {
 
     for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
       uint32_t BlockNodeID = IR->GetID(BlockNode);
+      memset(StaticMaps, 0, PhysicalRegisterCount[SRA_REGCLASS] * sizeof(LiveRange*));
       for (auto [CodeNode, IROp] : IR->GetCode(BlockNode)) {
         uint32_t Node = IR->GetID(CodeNode);
 
@@ -501,6 +502,7 @@ namespace FEXCore::IR {
 
         if (IROp->HasDest) {
           if (LiveRanges[Node].PrefferedRegister  != -1) {
+            assert(false);
             SRA_DEBUG("ssa%d is a pre-write\n", Node);
             auto vreg = LiveRanges[Node].PrefferedRegister;
             if (StaticMaps[vreg]) {
@@ -525,11 +527,16 @@ namespace FEXCore::IR {
             }
 
             // if not sra-allocated and full size, sra-allocate
-            if (LiveRanges[Node].PrefferedRegister  == -1 && IROp->Size == 8) {
-              LiveRanges[Node].PrefferedRegister = vreg; //0, 1, and so on
-              StaticMaps[vreg] = &LiveRanges[Node];
-              SetNodeClass(Graph, Node, IR::RegisterClassType { SRA_REGCLASS });
-              SRA_DEBUG("Marking ssa%d as allocated to sra%d\n", Node, vreg);
+            if (LiveRanges[Node].PrefferedRegister  == -1) {
+              // only full size reads can be aliased
+              if (IROp->Size == 8) {
+                LiveRanges[Node].PrefferedRegister = vreg; //0, 1, and so on
+                StaticMaps[vreg] = &LiveRanges[Node];
+                SetNodeClass(Graph, Node, IR::RegisterClassType { SRA_REGCLASS });
+                SRA_DEBUG("Marking ssa%d as allocated to sra%d\n", Node, vreg);
+              }
+            } else {
+              assert(false);
             }
           }
         }
@@ -542,8 +549,8 @@ namespace FEXCore::IR {
           if (StaticMaps[vreg]) {
             uint32_t ID  = StaticMaps[vreg] - &LiveRanges[0];
             // writes to self don't invalidate the span
-            if (ID != Op->Value.ID()) {
-              SRA_DEBUG("Markng ssa%d as written because ssa%d writes to sra%d\n", ID, Node, vreg);
+            if (ID != Op->Value.ID() || IROp->Size != 8) {
+              SRA_DEBUG("Markng ssa%d as written because ssa%d writes to sra%d with value ssa%d. Write size is %d\n", ID, Node, vreg, Op->Value.ID(), IROp->Size);
               StaticMaps[vreg]->Written = true;
             }
           }

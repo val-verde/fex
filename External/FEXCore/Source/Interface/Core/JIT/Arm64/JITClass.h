@@ -30,25 +30,30 @@ using namespace vixl;
 using namespace vixl::aarch64;
 
 //
-const std::array<aarch64::Register, 10> SRA64 = {
+const std::array<aarch64::Register, 16> SRA64 = {
   x19, x20, x21, x22, x23, x24, x25, x26,
-  x27, x29
+  x27, x29, x18, x17, x16, x15, x14, x13
 };
+
+// RA64 array has more entries for spilling
+#define RA64_COUNT 9
 
 const std::array<aarch64::Register, 15> RA64 = {
   x4, x5, x6, x7, x8, x9, x10, x11,
-  x12, x13, x14, x15, x16, x17, x18,
+  x12,
+  
+  x13, x14, x15, x16, x17, x18,
 };
 
-const std::array<std::pair<aarch64::Register, aarch64::Register>, 7>  RA64Pair = {{
+const std::array<std::pair<aarch64::Register, aarch64::Register>, 4>  RA64Pair = {{
   {x4, x5},
   {x6, x7},
   {x8, x9},
   {x10, x11},
+/*
   {x12, x13},
   {x14, x15},
   {x16, x17},
-/*
   {x18, x19},
   {x20, x21},
   {x22, x23},
@@ -57,15 +62,15 @@ const std::array<std::pair<aarch64::Register, aarch64::Register>, 7>  RA64Pair =
   */
 }};
 
-const std::array<std::pair<aarch64::Register, aarch64::Register>, 7> RA32Pair = {{
+const std::array<std::pair<aarch64::Register, aarch64::Register>, 4> RA32Pair = {{
   {w4, w5},
   {w6, w7},
   {w8, w9},
   {w10, w11},
+  /*
   {w12, w13},
   {w14, w15},
   {w16, w17},
-/*
   {w18, w19},
   {w20, w21},
   {w22, w23},
@@ -119,7 +124,7 @@ private:
   /**
    * @name Register Allocation
    * @{ */
-  constexpr static uint32_t NumGPRs = RA64.size();
+  constexpr static uint32_t NumGPRs = RA64_COUNT;//RA64.size();
   constexpr static uint32_t NumFPRs = RAFPR.size();
   constexpr static uint32_t NumGPRPairs = RA64Pair.size();
   constexpr static uint32_t NumCalleeGPRs = 10;
@@ -239,8 +244,8 @@ private:
 
   uint32_t SpillSlots{};
 
-  void SpillStaticRegs();
-  void FillStaticRegs();
+  void SpillStaticRegs(bool OnlyCallerSaved = false);
+  void FillStaticRegs(bool OnlyCallerSaved = false);
 
   using OpHandler = void (JITCore::*)(FEXCore::IR::IROp_Header *IROp, uint32_t Node);
   std::array<OpHandler, FEXCore::IR::IROps::OP_LAST + 1> OpHandlers {};

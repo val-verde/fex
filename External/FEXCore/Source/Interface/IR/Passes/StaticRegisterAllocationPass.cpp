@@ -18,7 +18,7 @@ bool IsStaticAlloc(uint32_t Offset) {
 #ifdef _M_X86_64
     rv = reg < 1; // RAX -> 1 in total
 #else
-    rv = reg < 10; // 0..9 -> 10 in total
+    rv = reg < 16; // 0..15 -> 16 in total
 #endif
   }
 

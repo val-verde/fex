@@ -479,6 +479,13 @@ namespace FEXCore::IR {
             // Set the node end to be at least here
             LiveRanges[ArgNode].End = Node;
           } else {
+
+            if (LiveRanges[ArgNode].PrefferedRegister != -1) {
+              SRA_DEBUG("Demoting ssa%d because it has an out of block read in ssa%d\n", ArgNode, Node);
+              LiveRanges[ArgNode].PrefferedRegister = -1;
+              auto ArgNodeNode = IR->GetNode(IROp->Args[i]);
+              SetNodeClass(Graph, ArgNode, GetRegClassFromNode(IR, ArgNodeNode->Op(IR->GetData())));
+            }
             // Grow the live range to include this use
             LiveRanges[ArgNode].Begin = std::min(LiveRanges[ArgNode].Begin, Node);
             LiveRanges[ArgNode].End = std::max(LiveRanges[ArgNode].End, Node);

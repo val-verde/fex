@@ -688,8 +688,21 @@ namespace FEXCore::IR {
       for (uint32_t j = i + 1; j < NodeCount; ++j) {
         if (!(LiveRanges[i].Begin >= LiveRanges[j].End ||
               LiveRanges[j].Begin >= LiveRanges[i].End)) {
-          AddInterference(i, j);
-          AddInterference(j, i);
+          
+          auto GetClass = [](uint64_t RegAndClass) {
+            uint32_t Class = RegAndClass >> 32;
+
+            if (Class == IR::GPRPairClass.Val)
+              return IR::GPRClass.Val;
+            else
+              return Class;
+          };
+
+          if (GetClass(Graph->Nodes[i].Head.RegAndClass) == GetClass(Graph->Nodes[j].Head.RegAndClass))
+          {
+            AddInterference(i, j);
+            AddInterference(j, i);
+          }
         }
       }
     }
@@ -1189,11 +1202,11 @@ namespace FEXCore::IR {
 
     // Linear foward scan based interference calculation is faster for smaller blocks
     // Smarter block based interference calculation is faster for larger blocks
-    if (SSACount >= 2048) {
+    /*if (SSACount >= 2048) {
       CalculateBlockInterferences(&IR);
       CalculateBlockNodeInterference(&IR);
     }
-    else {
+    else*/ {
       CalculateNodeInterference(&IR);
     }
     AllocateVirtualRegisters();

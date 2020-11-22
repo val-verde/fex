@@ -249,6 +249,8 @@ DEF_OP(Thunk) {
 
   uint64_t SPOffset = AlignUp((RA64.size() + 1) * 8, 16);
 
+  SpillStaticRegs(); // spill to ctx before ra64 spill
+
   sub(sp, sp, SPOffset);
 
   int i = 0;
@@ -260,14 +262,12 @@ DEF_OP(Thunk) {
 
   mov(x0, GetReg<RA_64>(Op->Header.Args[0].ID()));
 
-  SpillStaticRegs();
 #if _M_X86_64
   ERROR_AND_DIE("JIT: OP_THUNK not supported with arm simulator")
 #else
   LoadConstant(x2, Op->ThunkFnPtr);
   blr(x2);
 #endif
-  FillStaticRegs();
 
   // Fix the stack and any values that were stepped on
   i = 0;
@@ -277,6 +277,8 @@ DEF_OP(Thunk) {
   }
 
   ldr(lr, MemOperand(sp, RA64.size() * 8 + 0 * 8));
+
+  FillStaticRegs(); // loat from ctx after ra64 refill
 
   add(sp, sp, SPOffset);
 }

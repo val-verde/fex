@@ -180,6 +180,23 @@ namespace {
     Graph->Nodes[Node].Head.PhiPartner = &Graph->Nodes[Partner];
   }
 
+
+  bool DoesNodeConflictWithRegAndClass(RegisterGraph *Graph, RegisterNode const *InterferenceNode, uint64_t RegAndClass) {
+    if (InterferenceNode->Head.RegAndClass == RegAndClass) {
+      return true;
+    }
+
+    FEXCore::IR::RegisterClassType InterferenceClass = FEXCore::IR::RegisterClassType{(uint32_t)(InterferenceNode->Head.RegAndClass >> 32)};
+    uint32_t InterferenceReg = InterferenceNode->Head.RegAndClass;
+    if (InterferenceReg != INVALID_REG &&
+        !Graph->Set.Classes[InterferenceClass].Conflicts.empty() &&
+        Graph->Set.Classes[InterferenceClass].Conflicts[InterferenceReg] == RegAndClass) {
+      return true;
+    }
+
+    return false;
+  }
+
   /**
    * @brief Individual node interference check
    */
@@ -187,15 +204,8 @@ namespace {
     // Walk the node's interference list and see if it interferes with this register
     for (uint32_t i = 0; i < Node->Head.InterferenceCount; ++i) {
       RegisterNode *InterferenceNode = &Graph->Nodes[Node->InterferenceList[i]];
-      if (InterferenceNode->Head.RegAndClass == RegAndClass) {
-        return true;
-      }
-
-      FEXCore::IR::RegisterClassType InterferenceClass = FEXCore::IR::RegisterClassType{(uint32_t)(InterferenceNode->Head.RegAndClass >> 32)};
-      uint32_t InterferenceReg = InterferenceNode->Head.RegAndClass;
-      if (InterferenceReg != INVALID_REG &&
-          !Graph->Set.Classes[InterferenceClass].Conflicts.empty() &&
-          Graph->Set.Classes[InterferenceClass].Conflicts[InterferenceReg] == RegAndClass) {
+      
+      if (DoesNodeConflictWithRegAndClass(Graph, InterferenceNode, RegAndClass)) {
         return true;
       }
     }

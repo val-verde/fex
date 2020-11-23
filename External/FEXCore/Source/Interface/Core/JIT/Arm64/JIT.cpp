@@ -607,6 +607,9 @@ void *JITCore::CompileCode([[maybe_unused]] FEXCore::IR::IRListView<true> const 
   auto Buffer = GetBuffer();
   
   auto HeaderOp = IR->GetHeader();
+
+  LoadConstant(x0, HeaderOp->Entry);
+  
   if (HeaderOp->ShouldInterpret) {
     
     auto Entry = Buffer->GetOffsetAddress<uint64_t>(GetCursorOffset());

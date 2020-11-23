@@ -60,7 +60,7 @@ namespace {
     uint32_t RematCost;
     int32_t PrefferedRegister;
     bool Written;
-    bool PreWritten;
+    uint32_t PreWritten;
   };
 
   struct SpillStackUnit {
@@ -410,7 +410,7 @@ namespace FEXCore::IR {
     if (Nodes > LiveRanges.size()) {
       LiveRanges.resize(Nodes);
     }
-    LiveRanges.assign(Nodes * sizeof(LiveRange), {~0U, ~0U, 0, -1, false, false});
+    LiveRanges.assign(Nodes * sizeof(LiveRange), {~0U, ~0U, 0, -1, false, 0});
 
     LiveRange* StaticMaps[PhysicalRegisterCount[SRA_REGCLASS]];
     memset(StaticMaps, 0, PhysicalRegisterCount[SRA_REGCLASS] * sizeof(LiveRange*));
@@ -430,7 +430,7 @@ namespace FEXCore::IR {
             //pre-write and sra-allocate in the defining node - this might be undone if a read before the actual store happens
             SRA_DEBUG("Prewritting ssa%d (Store in ssa%d)\n", Op->Value.ID(), Node);
             LiveRanges[Op->Value.ID()].PrefferedRegister = vreg;
-            LiveRanges[Op->Value.ID()].PreWritten = true;
+            LiveRanges[Op->Value.ID()].PreWritten = Node;
             SetNodeClass(Graph, Op->Value.ID(), IR::RegisterClassType { SRA_REGCLASS });
           }
         }
@@ -533,7 +533,7 @@ namespace FEXCore::IR {
 
               SRA_DEBUG("ssa%d cannot be a pre-write because ssa%d reads from sra%d before storereg", ID, Node, vreg);
               StaticMaps[vreg]->PrefferedRegister = -1;
-              StaticMaps[vreg]->PreWritten = false;
+              StaticMaps[vreg]->PreWritten = 0;
               SetNodeClass(Graph, ID, IR::GPRClass);
             }
 
@@ -565,9 +565,10 @@ namespace FEXCore::IR {
               StaticMaps[vreg]->Written = true;
             }
           }
-
-          // no longer pre-written
-          LiveRanges[Op->Value.ID()].PreWritten = false;
+          if (LiveRanges[Op->Value.ID()].PreWritten == Node) {
+            // no longer pre-written
+            LiveRanges[Op->Value.ID()].PreWritten = 0;
+          }
           SRA_DEBUG("Markng ssa%d as no longer pre-written as ssa%d is a storereg for sra%d\n", Op->Value.ID(), Node, vreg);
 
           //LiveRanges[Op->Value.ID()].PrefferedRegister = vreg;

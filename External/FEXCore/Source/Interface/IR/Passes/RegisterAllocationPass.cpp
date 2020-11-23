@@ -541,6 +541,15 @@ namespace FEXCore::IR {
             if (LiveRanges[Node].PrefferedRegister  == -1) {
               // only full size reads can be aliased
               if (IROp->Size == 8) {
+
+                // We can only track a single active span.
+                // Marking here as written is overly agressive, but we can't know there 
+                // won't be a write later on the instruction stream
+                if (StaticMaps[vreg]) {
+                  SRA_DEBUG("Markng ssa%ld as written because ssa%d re-loads sra%d, and we can't track possible future writes\n", StaticMaps[vreg] - &LiveRanges[0], Node, vreg);
+                  StaticMaps[vreg]->Written = true; 
+                }
+
                 LiveRanges[Node].PrefferedRegister = vreg; //0, 1, and so on
                 StaticMaps[vreg] = &LiveRanges[Node];
                 SetNodeClass(Graph, Node, IR::RegisterClassType { SRA_REGCLASS });

@@ -72,7 +72,9 @@ static void PrintArg(std::stringstream *out, IRListView<false> const* IR, Ordere
     uint32_t Reg = RegClass;
     switch (Class) {
       case FEXCore::IR::GPRClass.Val: *out << "(GPR"; break;
+      case FEXCore::IR::GPRFixedClass.Val: *out << "(GPRFixed"; break;
       case FEXCore::IR::FPRClass.Val: *out << "(FPR"; break;
+      case FEXCore::IR::FPRFixedClass.Val: *out << "(FPRFixed"; break;
       case FEXCore::IR::GPRPairClass.Val: *out << "(GPRPair"; break;
       case FEXCore::IR::ComplexClass.Val: *out << "(Complex"; break;
       case FEXCore::IR::InvalidClass.Val: *out << "(Invalid"; break;
@@ -188,7 +190,9 @@ void Dump(std::stringstream *out, IRListView<false> const* IR, IR::RegisterAlloc
             uint32_t Reg = RegClass;
             switch (Class) {
               case FEXCore::IR::GPRClass.Val: *out << "(GPR"; break;
+              case FEXCore::IR::GPRFixedClass.Val: *out << "(GPRFixed"; break;
               case FEXCore::IR::FPRClass.Val: *out << "(FPR"; break;
+              case FEXCore::IR::FPRFixedClass.Val: *out << "(FPRFixed"; break;
               case FEXCore::IR::GPRPairClass.Val: *out << "(GPRPair"; break;
               case FEXCore::IR::ComplexClass.Val: *out << "(Complex"; break;
               case FEXCore::IR::InvalidClass.Val: *out << "(Invalid"; break;

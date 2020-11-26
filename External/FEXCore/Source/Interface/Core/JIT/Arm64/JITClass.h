@@ -130,7 +130,7 @@ private:
   constexpr static uint32_t NumCalleeGPRs = 10;
   constexpr static uint32_t NumCalleeGPRPairs = 5;
   constexpr static uint32_t RegisterCount = NumGPRs + NumFPRs + NumGPRPairs;
-  constexpr static uint32_t RegisterClasses = 5;
+  constexpr static uint32_t RegisterClasses = 6;
 
   constexpr static uint64_t GPRBase = (0ULL << 32);
   constexpr static uint64_t FPRBase = (1ULL << 32);

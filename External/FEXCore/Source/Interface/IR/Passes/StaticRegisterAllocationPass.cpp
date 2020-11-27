@@ -35,7 +35,7 @@ bool IsStaticAllocFpr(uint32_t Offset, RegisterClassType Class, bool AllowGpr) {
   auto end = offsetof(FEXCore::Core::ThreadState, State.xmm[17][0]);
 
   if (Offset >= begin && Offset < end) {
-    auto reg = (Offset - begin)/8;
+    auto reg = (Offset - begin)/16;
     assert(Class == IR::FPRClass || (AllowGpr && Class == IR::GPRClass));
 
 #ifdef _M_X86_64

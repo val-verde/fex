@@ -539,33 +539,9 @@ namespace FEXCore::IR {
         }
     };
 
-    // do a pass to set writen IDs
-    for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
-      uint32_t BlockNodeID = IR->GetID(BlockNode);
-      for (auto [CodeNode, IROp] : IR->GetCode(BlockNode)) {
-        uint32_t Node = IR->GetID(CodeNode);
-        if (IROp->Op == OP_STOREREGISTER) {
-          auto Op = IROp->C<IR::IROp_StoreRegister>();
-          //int -1 /*vreg*/ = (int)(Op->Offset / 8) - 1;
-
-          if (IsPreWritable(IROp->Size, Op->StaticClass) 
-            && LiveRanges[Op->Value.ID()].PrefferedRegister == -1
-            && !LiveRanges[Op->Value.ID()].Global) {
-            
-            //pre-write and sra-allocate in the defining node - this might be undone if a read before the actual store happens
-            SRA_DEBUG("Prewritting ssa%d (Store in ssa%d)\n", Op->Value.ID(), Node);
-            LiveRanges[Op->Value.ID()].PrefferedRegister = GetRegAndClassFromOffset(Op->Offset);
-            LiveRanges[Op->Value.ID()].PreWritten = Node;
-            SetNodeClass(Graph, Op->Value.ID(), Op->StaticClass);
-          }
-        }
-      }
-    }
-
     auto GprSize = PhysicalRegisterCount[GPRFixedClass.Val];
     auto MapsSize = PhysicalRegisterCount[GPRFixedClass.Val] + PhysicalRegisterCount[FPRFixedClass.Val];
     LiveRange* StaticMaps[MapsSize];
-    memset(StaticMaps, 0, MapsSize* sizeof(LiveRange*));
     
     auto GetStaticMapFromOffset = [&](uint32_t Offset) {
         auto beginGpr = offsetof(FEXCore::Core::ThreadState, State.gregs[0]);
@@ -603,9 +579,31 @@ namespace FEXCore::IR {
       }
     };
 
+    // do a pass to set writen IDs
+    for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
+      for (auto [CodeNode, IROp] : IR->GetCode(BlockNode)) {
+        uint32_t Node = IR->GetID(CodeNode);
+        if (IROp->Op == OP_STOREREGISTER) {
+          auto Op = IROp->C<IR::IROp_StoreRegister>();
+          //int -1 /*vreg*/ = (int)(Op->Offset / 8) - 1;
+
+          if (IsPreWritable(IROp->Size, Op->StaticClass) 
+            && LiveRanges[Op->Value.ID()].PrefferedRegister == -1
+            && !LiveRanges[Op->Value.ID()].Global) {
+            
+            //pre-write and sra-allocate in the defining node - this might be undone if a read before the actual store happens
+            SRA_DEBUG("Prewritting ssa%d (Store in ssa%d)\n", Op->Value.ID(), Node);
+            LiveRanges[Op->Value.ID()].PrefferedRegister = GetRegAndClassFromOffset(Op->Offset);
+            LiveRanges[Op->Value.ID()].PreWritten = Node;
+            SetNodeClass(Graph, Op->Value.ID(), Op->StaticClass);
+          }
+        }
+      }
+    }
+
     ////
     for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
-      memset(StaticMaps, 0, MapsSize* sizeof(LiveRange*));
+      memset(StaticMaps, 0, MapsSize * sizeof(LiveRange*));
       for (auto [CodeNode, IROp] : IR->GetCode(BlockNode)) {
         uint32_t Node = IR->GetID(CodeNode);
 

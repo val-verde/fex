@@ -409,7 +409,7 @@ JITCore::JITCore(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadSt
   RAPass->AddRegisters(FEXCore::IR::GPRClass, NumUsedGPRs);
   RAPass->AddRegisters(FEXCore::IR::GPRFixedClass, SRA64.size());
   RAPass->AddRegisters(FEXCore::IR::FPRClass, NumFPRs);
-  RAPass->AddRegisters(FEXCore::IR::FPRFixedClass, 1);
+  RAPass->AddRegisters(FEXCore::IR::FPRFixedClass, SRAFPR.size());
   RAPass->AddRegisters(FEXCore::IR::GPRPairClass, NumUsedGPRPairs);
   RAPass->AddRegisters(FEXCore::IR::ComplexClass, 1);
 
@@ -1185,14 +1185,22 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
 void JITCore::SpillStaticRegs(bool OnlyCallerSaved) {
   for (size_t i = 0; i < SRA64.size(); i++) {
     if (!OnlyCallerSaved || SRA64[i].GetCode() <= 18)
-      str(SRA64[i], MemOperand(STATE, (i + 1) * 8));
+      str(SRA64[i], MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.gregs[i])));
+  }
+
+  for (size_t i = 0; i < SRAFPR.size(); i++) {
+    str(SRAFPR[i].Q(), MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.xmm[i][0])));
   }
 }
 
 void JITCore::FillStaticRegs(bool OnlyCallerSaved) {
   for (size_t i = 0; i < SRA64.size(); i++) {
     if (!OnlyCallerSaved || SRA64[i].GetCode() <= 18)
-      ldr(SRA64[i], MemOperand(STATE, (i + 1) * 8));
+      ldr(SRA64[i], MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.gregs[i])));
+  }
+
+  for (size_t i = 0; i < SRAFPR.size(); i++) {
+    ldr(SRAFPR[i].Q(), MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.xmm[i][0])));
   }
 }
 

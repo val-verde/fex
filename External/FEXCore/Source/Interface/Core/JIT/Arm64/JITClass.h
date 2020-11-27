@@ -79,12 +79,16 @@ const std::array<std::pair<aarch64::Register, aarch64::Register>, 4> RA32Pair = 
   */
 }};
 
+const std::array<aarch64::VRegister, 16> SRAFPR = {
+  v16, v17, v18, v19, v20, v21, v22, v23,
+  v24, v25, v26, v27, v28, v29, v30, v31
+};
+
 //  v8..v15 = (lower 64bits) Callee saved
-const std::array<aarch64::VRegister, 22> RAFPR = {
-  v3, v4, v5, v6, v7, v8, v16,
-  v17, v18, v19, v20, v21, v22,
-  v23, v24, v25, v26, v27, v28,
-  v29, v30, v31};
+const std::array<aarch64::VRegister, 12> RAFPR = {
+/*v0,  v1,  v2,  v3,*/v4,  v5,  v6,  v7,  // v0 ~ v3 are used as temps
+  v8,  v9,  v10, v11, v12, v13, v14, v15
+};
 
 class JITCore final : public CPUBackend, public vixl::aarch64::Assembler  {
 public:

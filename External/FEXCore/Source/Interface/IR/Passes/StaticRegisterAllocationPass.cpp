@@ -10,13 +10,36 @@ public:
   bool Run(IREmitter *IREmit) override;
 };
 
-bool IsStaticAlloc(uint32_t Offset) {
+bool IsStaticAllocGpr(uint32_t Offset, RegisterClassType Class) {
   bool rv = false;
-  if (Offset >= 1*8 && Offset < 17*8) {
-    auto reg = (Offset/8) - 1;
+  auto begin = offsetof(FEXCore::Core::ThreadState, State.gregs[0]);
+  auto end = offsetof(FEXCore::Core::ThreadState, State.gregs[17]);
+
+  if (Offset >= begin && Offset < end) {
+    auto reg = (Offset - begin) / 8;
+    assert(Class == IR::GPRClass);
 
 #ifdef _M_X86_64
     rv = reg < 1; // RAX -> 1 in total
+#else
+    rv = reg < 16; // 0..15 -> 16 in total
+#endif
+  }
+
+  return rv;
+}
+
+bool IsStaticAllocFpr(uint32_t Offset, RegisterClassType Class, bool AllowGpr) {
+  bool rv = false;
+  auto begin = offsetof(FEXCore::Core::ThreadState, State.xmm[0][0]);
+  auto end = offsetof(FEXCore::Core::ThreadState, State.xmm[17][0]);
+
+  if (Offset >= begin && Offset < end) {
+    auto reg = (Offset - begin)/8;
+    assert(Class == IR::FPRClass || (AllowGpr && Class == IR::GPRClass));
+
+#ifdef _M_X86_64
+    rv = reg < 1; // XMM0 -> 1 in total
 #else
     rv = reg < 16; // 0..15 -> 16 in total
 #endif
@@ -48,18 +71,26 @@ bool StaticRegisterAllocationPass::Run(IREmitter *IREmit) {
         if (IROp->Op == OP_LOADCONTEXT) {
             auto Op = IROp->CW<IR::IROp_LoadContext>();
 
-            if (IsStaticAlloc(Op->Offset)) {
-
-              OrderedNode *sraReg = IREmit->_LoadRegister(false, Op->Offset, GPRClass, GPRFixedClass, Op->Header.Size);
+            if (IsStaticAllocGpr(Op->Offset, Op->Class) || IsStaticAllocFpr(Op->Offset, Op->Class, false)) {
+              auto StaticClass = Op->Class == GPRClass ? GPRFixedClass : FPRFixedClass;
+              OrderedNode *sraReg = IREmit->_LoadRegister(false, Op->Offset, Op->Class, StaticClass, Op->Header.Size);
 
               IREmit->ReplaceAllUsesWith(CodeNode, sraReg);
             }
         } if (IROp->Op == OP_STORECONTEXT) {
             auto Op = IROp->CW<IR::IROp_StoreContext>();
 
-            if (IsStaticAlloc(Op->Offset)) {
+            if (IsStaticAllocGpr(Op->Offset, Op->Class) || IsStaticAllocFpr(Op->Offset, Op->Class, true)) {
+              auto val = IREmit->UnwrapNode(Op->Value);
 
-              OrderedNode *sraReg = IREmit->_StoreRegister(IREmit->UnwrapNode(Op->Value), false, Op->Offset, GPRClass, GPRFixedClass, Op->Header.Size);
+              auto GeneralClass = Op->Class;
+              if (IsStaticAllocFpr(Op->Offset, GeneralClass, true) && GeneralClass == GPRClass) {
+                val = IREmit->_VCastFromGPR(Op->Header.Size, Op->Header.Size, val);
+                GeneralClass = FPRClass;
+              }
+
+              auto StaticClass = GeneralClass == GPRClass ? GPRFixedClass : FPRFixedClass;
+              OrderedNode *sraReg = IREmit->_StoreRegister(val, false, Op->Offset, GeneralClass, StaticClass, Op->Header.Size);
 
               IREmit->Remove(CodeNode);
             }

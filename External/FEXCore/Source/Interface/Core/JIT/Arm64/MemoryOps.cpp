@@ -129,36 +129,74 @@ DEF_OP(LoadRegister) {
   auto Op = IROp->C<IR::IROp_LoadRegister>();
   uint8_t OpSize = IROp->Size;
 
-  assert(Op->Class.Val == 0);
+  if (Op->Class == IR::GPRClass) {
+    auto regId = Op->Offset / 8 - 1;
+    auto regOffs = Op->Offset & 7;
 
-  auto regId = Op->Offset / 8 - 1;
-  auto regOffs = Op->Offset & 7;
+    assert(regId < SRA64.size());
 
-  assert(regId < SRA64.size());
+    auto reg = SRA64[regId];
+    
+    switch(Op->Header.Size) {
+      case 1:
+        assert(regOffs == 0 || regOffs == 1);
+        ubfx(GetReg<RA_64>(Node), reg, regOffs * 8, 8);
+        break;
 
-  auto reg = SRA64[regId];
+      case 2:
+        assert(regOffs == 0);
+        ubfx(GetReg<RA_64>(Node), reg, 0, 16);
+        break;
 
-  switch(Op->Header.Size) {
-    case 1:
-      assert(regOffs == 0 || regOffs == 1);
-      ubfx(GetReg<RA_64>(Node), reg, regOffs * 8, 8);
-      break;
+      case 4:
+        assert(regOffs == 0);
+        mov(GetReg<RA_32>(Node), reg.W());
+        break;
 
-    case 2:
-      assert(regOffs == 0);
-      ubfx(GetReg<RA_64>(Node), reg, 0, 16);
-      break;
+      case 8:
+        assert(regOffs == 0);
+        if (GetReg<RA_64>(Node).GetCode() != reg.GetCode())
+          mov(GetReg<RA_64>(Node), reg);
+        break;
+    }
+  } else if (Op->Class == IR::FPRClass) {
+    auto regId = (Op->Offset - offsetof(FEXCore::Core::ThreadState, State.xmm[0][0])) / 16;
+    auto regOffs = Op->Offset & 15;
 
-    case 4:
-      assert(regOffs == 0);
-      mov(GetReg<RA_32>(Node), reg.W());
-      break;
+    assert(regId < SRAFPR.size());
 
-    case 8:
-      assert(regOffs == 0);
-      if (GetReg<RA_64>(Node).GetCode() != reg.GetCode())
-        mov(GetReg<RA_64>(Node), reg);
-      break;
+    auto guest = SRAFPR[regId];
+    auto host = GetSrc(Node);
+
+    switch(Op->Header.Size) {
+      case 1:
+        assert(regOffs == 0);
+        mov(host.B(), guest.B());
+        break;
+
+      case 2:
+        assert(regOffs == 0);
+        fmov(host.H(), guest.H());
+        break;
+
+      case 4:
+        assert(regOffs == 0);
+        fmov(host.S(), guest.S());
+        break;
+
+      case 8:
+        assert(regOffs == 0);
+        mov(host.D(), guest.D());
+        break;
+
+      case 16:
+        assert(regOffs == 0);
+        if (host.GetCode() != guest.GetCode())
+          mov(host.Q(), guest.Q());
+        break;
+    }
+  } else {
+    assert(false);
   }
 }
 
@@ -166,36 +204,74 @@ DEF_OP(StoreRegister) {
   auto Op = IROp->C<IR::IROp_StoreRegister>();
   uint8_t OpSize = IROp->Size;
 
-  assert(Op->Class.Val == 0);
 
-  auto regId = Op->Offset / 8 - 1;
-  auto regOffs = Op->Offset & 7;
-  
-  assert(regId < SRA64.size());
+  if (Op->Class == IR::GPRClass) {
+    auto regId = Op->Offset / 8 - 1;
+    auto regOffs = Op->Offset & 7;
 
-  auto reg = SRA64[regId];
+    assert(regId < SRA64.size());
 
-  switch(Op->Header.Size) {
-    case 1:
-      assert(regOffs == 0 || regOffs == 1);
-      bfi(reg, GetReg<RA_64>(Op->Value.ID()), regOffs * 8, 8);
-      break;
+    auto reg = SRA64[regId];
+    
+    switch(Op->Header.Size) {
+      case 1:
+        assert(regOffs == 0 || regOffs == 1);
+        bfi(reg, GetReg<RA_64>(Op->Value.ID()), regOffs * 8, 8);
+        break;
 
-    case 2:
-      assert(regOffs == 0);
-      bfi(reg, GetReg<RA_64>(Op->Value.ID()), 0, 16);
-      break;
-      
-    case 4:
-      assert(regOffs == 0);
-      bfi(reg, GetReg<RA_64>(Op->Value.ID()), 0, 32);
-      break;
+      case 2:
+        assert(regOffs == 0);
+        bfi(reg, GetReg<RA_64>(Op->Value.ID()), 0, 16);
+        break;
+        
+      case 4:
+        assert(regOffs == 0);
+        bfi(reg, GetReg<RA_64>(Op->Value.ID()), 0, 32);
+        break;
 
-    case 8:
-      assert(regOffs == 0);
-      if (GetReg<RA_64>(Op->Value.ID()).GetCode() != reg.GetCode())
-        mov(reg, GetReg<RA_64>(Op->Value.ID()));
-      break;
+      case 8:
+        assert(regOffs == 0);
+        if (GetReg<RA_64>(Op->Value.ID()).GetCode() != reg.GetCode())
+          mov(reg, GetReg<RA_64>(Op->Value.ID()));
+        break;
+    }
+  } else if (Op->Class == IR::FPRClass) {
+    auto regId = (Op->Offset - offsetof(FEXCore::Core::ThreadState, State.xmm[0][0])) / 16;
+    auto regOffs = Op->Offset & 15;
+
+    assert(regId < SRAFPR.size());
+
+    auto guest = SRAFPR[regId];
+    auto host = GetSrc(Op->Value.ID());
+
+    switch(Op->Header.Size) {
+      case 1:
+        ins(guest.V16B(), regOffs, host.V16B(), 0);
+        break;
+
+      case 2:
+        assert((regOffs & 1) == 0);
+        ins(guest.V8H(), regOffs/2, host.V8H(), 0);
+        break;
+
+      case 4:
+        assert((regOffs & 3) == 0);
+        ins(guest.V4S(), regOffs/4, host.V4S(), 0);
+        break;
+
+      case 8:
+        assert((regOffs & 7) == 0);
+        ins(guest.V2D(), regOffs / 8, host.V2D(), 0);
+        break;
+
+      case 16:
+        assert(regOffs == 0);
+        if (guest.GetCode() != host.GetCode())
+          mov(guest.Q(), host.Q());
+        break;
+    }
+  } else {
+    assert(false);
   }
 }
 

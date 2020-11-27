@@ -1232,7 +1232,7 @@ namespace FEXCore::IR {
     ResetRegisterGraph(Graph, SSACount);
     FindNodeClasses(Graph, &IR);
     CalculateLiveRange(&IR);
-    OptimizeStaticRegisters(&IR);
+    //OptimizeStaticRegisters(&IR);
 
     // Linear foward scan based interference calculation is faster for smaller blocks
     // Smarter block based interference calculation is faster for larger blocks

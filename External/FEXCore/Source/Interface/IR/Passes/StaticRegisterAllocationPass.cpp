@@ -71,10 +71,16 @@ bool StaticRegisterAllocationPass::Run(IREmitter *IREmit) {
         if (IROp->Op == OP_LOADCONTEXT) {
             auto Op = IROp->CW<IR::IROp_LoadContext>();
 
-            if (IsStaticAllocGpr(Op->Offset, Op->Class) || IsStaticAllocFpr(Op->Offset, Op->Class, false)) {
-              auto StaticClass = Op->Class == GPRClass ? GPRFixedClass : FPRFixedClass;
-              OrderedNode *sraReg = IREmit->_LoadRegister(false, Op->Offset, Op->Class, StaticClass, Op->Header.Size);
-
+            if (IsStaticAllocGpr(Op->Offset, Op->Class) || IsStaticAllocFpr(Op->Offset, Op->Class, true)) {
+              auto GeneralClass = Op->Class;
+              if (IsStaticAllocFpr(Op->Offset, GeneralClass, true) && GeneralClass == GPRClass) {
+                GeneralClass = FPRClass;
+              }
+              auto StaticClass = GeneralClass == GPRClass ? GPRFixedClass : FPRFixedClass;
+              OrderedNode *sraReg = IREmit->_LoadRegister(false, Op->Offset, GeneralClass, StaticClass, Op->Header.Size);
+              if (GeneralClass != Op->Class) {
+                sraReg = IREmit->_VExtractToGPR(Op->Header.Size, Op->Header.Size, sraReg, 0);
+              }
               IREmit->ReplaceAllUsesWith(CodeNode, sraReg);
             }
         } if (IROp->Op == OP_STORECONTEXT) {

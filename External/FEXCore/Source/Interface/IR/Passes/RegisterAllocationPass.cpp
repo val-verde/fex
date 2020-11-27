@@ -57,7 +57,7 @@ namespace {
     uint32_t Begin;
     uint32_t End;
     uint32_t RematCost;
-    int32_t PrefferedRegister;
+    int64_t PrefferedRegister;
     uint32_t PreWritten;
     bool Written;
     bool Global;
@@ -497,6 +497,48 @@ namespace FEXCore::IR {
   }
 
   void ConstrainedRAPass::OptimizeStaticRegisters(FEXCore::IR::IRListView<false> *IR) {
+
+    auto IsPreWritable = [](uint8_t Size, RegisterClassType StaticClass) {
+      if (StaticClass == GPRFixedClass) {
+        return Size == 8;
+      } else if (StaticClass == FPRFixedClass) {
+        return Size == 16;
+      } else {
+        assert(false);
+      }
+    };
+
+    auto IsAliasable = [](uint8_t Size, RegisterClassType StaticClass) {
+      if (StaticClass == GPRFixedClass) {
+        return Size == 8;
+      } else if (StaticClass == FPRFixedClass) {
+        return Size == 16;
+      } else {
+        assert(false);
+      }
+    };
+
+    auto GetRegAndClassFromOffset = [](uint32_t Offset) {
+        auto beginGpr = offsetof(FEXCore::Core::ThreadState, State.gregs[0]);
+        auto endGpr = offsetof(FEXCore::Core::ThreadState, State.gregs[17]);
+
+        auto beginFpr = offsetof(FEXCore::Core::ThreadState, State.xmm[0][0]);
+        auto endFpr = offsetof(FEXCore::Core::ThreadState, State.xmm[17][0]);
+
+        if (Offset >= beginGpr && Offset < endGpr) {
+          //assert(Class == GPRClass);
+          auto reg = (Offset - beginGpr) / 8;
+          return (uint64_t(GPRFixedClass.Val)<<32) | reg;
+        } else if (Offset >= beginFpr && Offset < endFpr) {
+          //assert(Class == FPRClass);
+          auto reg = (Offset - beginFpr) / 16;
+          return (uint64_t(FPRFixedClass.Val)<<32) | reg;
+        } else {
+          assert(false);
+          return ~0UL;
+        }
+    };
+
     // do a pass to set writen IDs
     for (auto [BlockNode, BlockHeader] : IR->GetBlocks()) {
       uint32_t BlockNodeID = IR->GetID(BlockNode);
@@ -504,19 +546,17 @@ namespace FEXCore::IR {
         uint32_t Node = IR->GetID(CodeNode);
         if (IROp->Op == OP_STOREREGISTER) {
           auto Op = IROp->C<IR::IROp_StoreRegister>();
-          if (Op->Class == GPRClass) {
-            int vreg = (int)(Op->Offset / 8) - 1;
+          //int -1 /*vreg*/ = (int)(Op->Offset / 8) - 1;
 
-            if (IROp->Size == 8 
-              && LiveRanges[Op->Value.ID()].PrefferedRegister == -1
-              && !LiveRanges[Op->Value.ID()].Global) {
-              
-              //pre-write and sra-allocate in the defining node - this might be undone if a read before the actual store happens
-              SRA_DEBUG("Prewritting ssa%d (Store in ssa%d)\n", Op->Value.ID(), Node);
-              LiveRanges[Op->Value.ID()].PrefferedRegister = vreg;
-              LiveRanges[Op->Value.ID()].PreWritten = Node;
-              SetNodeClass(Graph, Op->Value.ID(), Op->StaticClass);
-            }
+          if (IsPreWritable(IROp->Size, Op->StaticClass) 
+            && LiveRanges[Op->Value.ID()].PrefferedRegister == -1
+            && !LiveRanges[Op->Value.ID()].Global) {
+            
+            //pre-write and sra-allocate in the defining node - this might be undone if a read before the actual store happens
+            SRA_DEBUG("Prewritting ssa%d (Store in ssa%d)\n", Op->Value.ID(), Node);
+            LiveRanges[Op->Value.ID()].PrefferedRegister = GetRegAndClassFromOffset(Op->Offset);
+            LiveRanges[Op->Value.ID()].PreWritten = Node;
+            SetNodeClass(Graph, Op->Value.ID(), Op->StaticClass);
           }
         }
       }
@@ -526,8 +566,8 @@ namespace FEXCore::IR {
     auto MapsSize = PhysicalRegisterCount[GPRFixedClass.Val] + PhysicalRegisterCount[FPRFixedClass.Val];
     LiveRange* StaticMaps[MapsSize];
     memset(StaticMaps, 0, MapsSize* sizeof(LiveRange*));
-
-    auto GetStaticMap = [&](uint32_t Offset) {
+    
+    auto GetStaticMapFromOffset = [&](uint32_t Offset) {
         auto beginGpr = offsetof(FEXCore::Core::ThreadState, State.gregs[0]);
         auto endGpr = offsetof(FEXCore::Core::ThreadState, State.gregs[17]);
 
@@ -536,16 +576,31 @@ namespace FEXCore::IR {
 
         if (Offset >= beginGpr && Offset < endGpr) {
           //assert(Class == GPRClass);
-          auto reg = (Offset - beginFpr) / 8;
-          return StaticMaps[reg];
+          auto reg = (Offset - beginGpr) / 8;
+          return &StaticMaps[reg];
         } else if (Offset >= beginFpr && Offset < endFpr) {
           //assert(Class == FPRClass);
           auto reg = (Offset - beginFpr) / 16;
-          return StaticMaps[GprSize + reg];
+          return &StaticMaps[GprSize + reg];
         } else {
           assert(false);
-          return (LiveRange*)nullptr;
+          return (LiveRange**)nullptr;
         }
+    };
+
+    auto GetStaticMapFromReg = [&](int64_t RegAndClass) {
+      uint32_t Class = RegAndClass >> 32;
+      uint32_t Reg = RegAndClass;
+
+      if (Class == GPRFixedClass.Val) {
+        return &StaticMaps[Reg];
+      } else if (Class == FPRFixedClass.Val) {
+        return &StaticMaps[GprSize + Reg];
+      } else {
+        printf("Class: %d\n", Class);
+        assert(false);
+        return (LiveRange**)nullptr;
+      }
     };
 
     ////
@@ -573,48 +628,46 @@ namespace FEXCore::IR {
         if (IROp->HasDest) {
           if (LiveRanges[Node].PrefferedRegister  != -1) {
             SRA_DEBUG("ssa%d is a pre-write\n", Node);
-            auto vreg = LiveRanges[Node].PrefferedRegister;
-            if (StaticMaps[vreg]) {
-              SRA_DEBUG("Markng ssa%ld as written because ssa%d writes to sra%d\n", StaticMaps[vreg] - &LiveRanges[0], Node, vreg);
-              StaticMaps[vreg]->Written = true;
+            auto StaticMap = GetStaticMapFromReg(LiveRanges[Node].PrefferedRegister);
+            if ((*StaticMap)) {
+              SRA_DEBUG("Markng ssa%ld as written because ssa%d writes to sra%d\n", (*StaticMap) - &LiveRanges[0], Node, -1 /*vreg*/);
+              (*StaticMap)->Written = true;
             }
-            StaticMaps[vreg] = &LiveRanges[Node];
+            (*StaticMap) = &LiveRanges[Node];
           }
 
           if (IROp->Op == OP_LOADREGISTER) {
             auto Op = IROp->C<IR::IROp_LoadRegister>();
 
-            if (Op->Class == GPRClass) {
-              int vreg = (int)(Op->Offset / 8) - 1;
+            auto StaticMap = GetStaticMapFromOffset(Op->Offset);
 
-              // Make sure there wasn't a store pre-written before this read
-              if (StaticMaps[vreg] && StaticMaps[vreg]->PreWritten) {
-                uint32_t ID = StaticMaps[vreg] - &LiveRanges[0];
+            // Make sure there wasn't a store pre-written before this read
+            if ((*StaticMap) && (*StaticMap)->PreWritten) {
+              uint32_t ID = (*StaticMap) - &LiveRanges[0];
 
-                SRA_DEBUG("ssa%d cannot be a pre-write because ssa%d reads from sra%d before storereg", ID, Node, vreg);
-                StaticMaps[vreg]->PrefferedRegister = -1;
-                StaticMaps[vreg]->PreWritten = 0;
-                SetNodeClass(Graph, ID, Op->Class);
-              }
+              SRA_DEBUG("ssa%d cannot be a pre-write because ssa%d reads from sra%d before storereg", ID, Node, -1 /*vreg*/);
+              (*StaticMap)->PrefferedRegister = -1;
+              (*StaticMap)->PreWritten = 0;
+              SetNodeClass(Graph, ID, Op->Class);
+            }
 
-              // if not sra-allocated and full size, sra-allocate
-              if (!LiveRanges[Node].Global && LiveRanges[Node].PrefferedRegister  == -1) {
-                // only full size reads can be aliased
-                if (IROp->Size == 8) {
+            // if not sra-allocated and full size, sra-allocate
+            if (!LiveRanges[Node].Global && LiveRanges[Node].PrefferedRegister  == -1) {
+              // only full size reads can be aliased
+              if (IsAliasable(IROp->Size, Op->StaticClass)) {
 
-                  // We can only track a single active span.
-                  // Marking here as written is overly agressive, but 
-                  // there might be write(s) later on the instruction stream
-                  if (StaticMaps[vreg]) {
-                    SRA_DEBUG("Markng ssa%ld as written because ssa%d re-loads sra%d, and we can't track possible future writes\n", StaticMaps[vreg] - &LiveRanges[0], Node, vreg);
-                    StaticMaps[vreg]->Written = true; 
-                  }
-
-                  LiveRanges[Node].PrefferedRegister = vreg; //0, 1, and so on
-                  StaticMaps[vreg] = &LiveRanges[Node];
-                  SetNodeClass(Graph, Node, Op->StaticClass);
-                  SRA_DEBUG("Marking ssa%d as allocated to sra%d\n", Node, vreg);
+                // We can only track a single active span.
+                // Marking here as written is overly agressive, but 
+                // there might be write(s) later on the instruction stream
+                if ((*StaticMap)) {
+                  SRA_DEBUG("Markng ssa%ld as written because ssa%d re-loads sra%d, and we can't track possible future writes\n", (*StaticMap) - &LiveRanges[0], Node, -1 /*vreg*/);
+                  (*StaticMap)->Written = true; 
                 }
+
+                LiveRanges[Node].PrefferedRegister = GetRegAndClassFromOffset(Op->Offset); //0, 1, and so on
+                (*StaticMap) = &LiveRanges[Node];
+                SetNodeClass(Graph, Node, Op->StaticClass);
+                SRA_DEBUG("Marking ssa%d as allocated to sra%d\n", Node, -1 /*vreg*/);
               }
             }
           }
@@ -623,23 +676,21 @@ namespace FEXCore::IR {
         if (IROp->Op == OP_STOREREGISTER) {
           auto Op = IROp->C<IR::IROp_StoreRegister>();
 
-          if (Op->Class == GPRClass) {
-            int vreg = (int)(Op->Offset / 8) - 1;
-
-            // if a read pending, it has been writting
-            if (StaticMaps[vreg]) {
-              uint32_t ID  = StaticMaps[vreg] - &LiveRanges[0];
-              // writes to self don't invalidate the span
-              if (ID != Op->Value.ID() || IROp->Size != 8) {
-                SRA_DEBUG("Markng ssa%d as written because ssa%d writes to sra%d with value ssa%d. Write size is %d\n", ID, Node, vreg, Op->Value.ID(), IROp->Size);
-                StaticMaps[vreg]->Written = true;
-              }
+          //int -1 /*vreg*/ = (int)(Op->Offset / 8) - 1;
+          auto StaticMap = GetStaticMapFromOffset(Op->Offset);
+          // if a read pending, it has been writting
+          if ((*StaticMap)) {
+            uint32_t ID  = (*StaticMap) - &LiveRanges[0];
+            // writes to self don't invalidate the span
+            if (ID != Op->Value.ID() || IROp->Size != 8) {
+              SRA_DEBUG("Markng ssa%d as written because ssa%d writes to sra%d with value ssa%d. Write size is %d\n", ID, Node, -1 /*vreg*/, Op->Value.ID(), IROp->Size);
+              (*StaticMap)->Written = true;
             }
-            if (LiveRanges[Op->Value.ID()].PreWritten == Node) {
-              // no longer pre-written
-              LiveRanges[Op->Value.ID()].PreWritten = 0;
-              SRA_DEBUG("Markng ssa%d as no longer pre-written as ssa%d is a storereg for sra%d\n", Op->Value.ID(), Node, vreg);
-            }
+          }
+          if (LiveRanges[Op->Value.ID()].PreWritten == Node) {
+            // no longer pre-written
+            LiveRanges[Op->Value.ID()].PreWritten = 0;
+            SRA_DEBUG("Markng ssa%d as no longer pre-written as ssa%d is a storereg for sra%d\n", Op->Value.ID(), Node, -1 /*vreg*/);
           }
         }
       }
@@ -815,7 +866,7 @@ namespace FEXCore::IR {
       else {
 
         if (LiveRange->PrefferedRegister != -1) {
-          RegAndClass = (static_cast<uint64_t>(RegClass) << 32) + LiveRange->PrefferedRegister;
+          RegAndClass = LiveRange->PrefferedRegister;
         } else {
           for (uint32_t ri = 0; ri < RAClass->Count; ++ri) {
             uint64_t RegisterToCheck = (static_cast<uint64_t>(RegClass) << 32) + ri;

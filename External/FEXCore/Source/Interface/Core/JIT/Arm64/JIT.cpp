@@ -409,7 +409,7 @@ JITCore::JITCore(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadSt
   RAPass->AddRegisters(FEXCore::IR::GPRClass, NumUsedGPRs);
   RAPass->AddRegisters(FEXCore::IR::GPRFixedClass, SRA64.size());
   RAPass->AddRegisters(FEXCore::IR::FPRClass, NumFPRs);
-  RAPass->AddRegisters(FEXCore::IR::FPRFixedClass, SRAFPR.size());
+  RAPass->AddRegisters(FEXCore::IR::FPRFixedClass, SRAFPR.size()  );
   RAPass->AddRegisters(FEXCore::IR::GPRPairClass, NumUsedGPRPairs);
   RAPass->AddRegisters(FEXCore::IR::ComplexClass, 1);
 
@@ -547,11 +547,14 @@ static PhysReg GetPhys(IR::RegisterAllocationPass *RAPass, uint32_t Node) {
 
 template<>
 aarch64::Register JITCore::GetReg<JITCore::RA_32>(uint32_t Node) {
-  auto Reg = GetPhys(RAPass, Node);
+auto Reg = GetPhys(RAPass, Node);
   if (Reg.Class == IR::GPRFixedClass.Val) {
     return SRA64[Reg.VId].W();
-  } else {
+  } else if (Reg.Class == IR::GPRClass.Val) {
     return RA64[Reg.VId].W();
+  } else {
+    printf("Unexpected Class: %d\n", Reg.Class);
+    assert(false);
   }
 }
 
@@ -560,8 +563,11 @@ aarch64::Register JITCore::GetReg<JITCore::RA_64>(uint32_t Node) {
   auto Reg = GetPhys(RAPass, Node);
   if (Reg.Class == IR::GPRFixedClass.Val) {
     return SRA64[Reg.VId];
-  } else {
+  } else if (Reg.Class == IR::GPRClass.Val) {
     return RA64[Reg.VId];
+  } else {
+    printf("Unexpected Class: %d\n", Reg.Class);
+    assert(false);
   }
 }
 
@@ -578,13 +584,27 @@ std::pair<aarch64::Register, aarch64::Register> JITCore::GetSrcPair<JITCore::RA_
 }
 
 aarch64::VRegister JITCore::GetSrc(uint32_t Node) {
-  uint32_t Reg = GetPhys(RAPass, Node).VId;
-  return RAFPR[Reg];
+  auto Reg = GetPhys(RAPass, Node);
+  if (Reg.Class == IR::FPRFixedClass.Val) {
+    return SRAFPR[Reg.VId];
+  } else if (Reg.Class == IR::FPRClass.Val) {
+    return RAFPR[Reg.VId];
+  } else {
+    printf("Unexpected Class: %d\n", Reg.Class);
+    assert(false);
+  }
 }
 
 aarch64::VRegister JITCore::GetDst(uint32_t Node) {
-  uint32_t Reg = GetPhys(RAPass, Node).VId  ;
-  return RAFPR[Reg];
+  auto Reg = GetPhys(RAPass, Node);
+  if (Reg.Class == IR::FPRFixedClass.Val) {
+    return SRAFPR[Reg.VId];
+  } else if (Reg.Class == IR::FPRClass.Val) {
+    return RAFPR[Reg.VId];
+  } else {
+    printf("Unexpected Class: %d\n", Reg.Class);
+    assert(false);
+  }
 }
 
 bool JITCore::IsInlineConstant(const IR::OrderedNodeWrapper& WNode, uint64_t* Value) {

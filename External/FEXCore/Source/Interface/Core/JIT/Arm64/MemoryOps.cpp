@@ -130,7 +130,7 @@ DEF_OP(LoadRegister) {
   uint8_t OpSize = IROp->Size;
 
   if (Op->Class == IR::GPRClass) {
-    auto regId = Op->Offset / 8 - 1;
+    auto regId = (Op->Offset - offsetof(FEXCore::Core::ThreadState, State.gregs[0])) / 8;
     auto regOffs = Op->Offset & 7;
 
     assert(regId < SRA64.size());

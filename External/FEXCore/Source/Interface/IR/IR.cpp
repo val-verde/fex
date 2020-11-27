@@ -52,11 +52,15 @@ static void PrintArg(std::stringstream *out, [[maybe_unused]] IRListView<false> 
 }
 
 static void PrintArg(std::stringstream *out, [[maybe_unused]] IRListView<false> const* IR, RegisterClassType Arg) {
-  if (Arg == 0)
+  if (Arg == GPRClass.Val)
     *out << "GPR";
-  else if (Arg == 1)
+  else if (Arg == GPRFixedClass.Val)
+    *out << "GPRFixed";
+  else if (Arg == FPRClass.Val)
     *out << "FPR";
-  else if (Arg == 2)
+  else if (Arg == FPRFixedClass.Val)
+    *out << "FPRFixed";
+  else if (Arg == GPRPairClass.Val)
     *out << "GPRPair";
   else
     *out << "Unknown Registerclass " << Arg;

@@ -50,7 +50,7 @@ bool StaticRegisterAllocationPass::Run(IREmitter *IREmit) {
 
             if (IsStaticAlloc(Op->Offset)) {
 
-              OrderedNode *sraReg = IREmit->_LoadRegister(Op->Offset, GPRClass, Op->Header.Size);
+              OrderedNode *sraReg = IREmit->_LoadRegister(false, Op->Offset, GPRClass, GPRFixedClass, Op->Header.Size);
 
               IREmit->ReplaceAllUsesWith(CodeNode, sraReg);
             }
@@ -59,7 +59,7 @@ bool StaticRegisterAllocationPass::Run(IREmitter *IREmit) {
 
             if (IsStaticAlloc(Op->Offset)) {
 
-              OrderedNode *sraReg = IREmit->_StoreRegister(IREmit->UnwrapNode(Op->Value), Op->Offset, GPRClass, Op->Header.Size);
+              OrderedNode *sraReg = IREmit->_StoreRegister(IREmit->UnwrapNode(Op->Value), false, Op->Offset, GPRClass, GPRFixedClass, Op->Header.Size);
 
               IREmit->Remove(CodeNode);
             }

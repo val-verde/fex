@@ -409,7 +409,7 @@ JITCore::JITCore(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadSt
   RAPass->AddRegisters(FEXCore::IR::GPRClass, NumUsedGPRs);
   RAPass->AddRegisters(FEXCore::IR::GPRFixedClass, SRA64.size());
   RAPass->AddRegisters(FEXCore::IR::FPRClass, NumFPRs);
-  RAPass->AddRegisters(FEXCore::IR::FPRFixedClass, SRA64.size());
+  RAPass->AddRegisters(FEXCore::IR::FPRFixedClass, 1);
   RAPass->AddRegisters(FEXCore::IR::GPRPairClass, NumUsedGPRPairs);
   RAPass->AddRegisters(FEXCore::IR::ComplexClass, 1);
 
@@ -548,7 +548,7 @@ static PhysReg GetPhys(IR::RegisterAllocationPass *RAPass, uint32_t Node) {
 template<>
 aarch64::Register JITCore::GetReg<JITCore::RA_32>(uint32_t Node) {
   auto Reg = GetPhys(RAPass, Node);
-  if (Reg.Class == 4) {
+  if (Reg.Class == IR::GPRFixedClass.Val) {
     return SRA64[Reg.VId].W();
   } else {
     return RA64[Reg.VId].W();
@@ -558,7 +558,7 @@ aarch64::Register JITCore::GetReg<JITCore::RA_32>(uint32_t Node) {
 template<>
 aarch64::Register JITCore::GetReg<JITCore::RA_64>(uint32_t Node) {
   auto Reg = GetPhys(RAPass, Node);
-  if (Reg.Class == 4) {
+  if (Reg.Class == IR::GPRFixedClass.Val) {
     return SRA64[Reg.VId];
   } else {
     return RA64[Reg.VId];

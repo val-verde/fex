@@ -150,7 +150,8 @@ DEF_OP(LoadRegister) {
 
       case 4:
         assert(regOffs == 0);
-        mov(GetReg<RA_32>(Node), reg.W());
+        if (GetReg<RA_64>(Node).GetCode() != reg.GetCode())
+          mov(GetReg<RA_32>(Node), reg.W());
         break;
 
       case 8:
@@ -181,12 +182,14 @@ DEF_OP(LoadRegister) {
 
       case 4:
         assert(regOffs == 0);
-        fmov(host.S(), guest.S());
+        if (host.GetCode() != guest.GetCode())
+          fmov(host.S(), guest.S());
         break;
 
       case 8:
         assert(regOffs == 0);
-        mov(host.D(), guest.D());
+        if (host.GetCode() != guest.GetCode())
+          mov(host.D(), guest.D());
         break;
 
       case 16:

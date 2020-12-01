@@ -265,6 +265,41 @@ bool ConstProp::Run(IREmitter *IREmit) {
         }
         break;
       }
+
+      case OP_VFADD:
+      case OP_VFSUB:
+      case OP_VFMUL:
+      case OP_VFDIV: {
+        auto flopSize = IROp->Size;
+        for (int i = 0; i < IROp->NumArgs; i++) {
+          auto argHeader = IREmit->GetOpHeader(IROp->Args[i]);
+
+          if (argHeader->Op == OP_VMOV) {
+            auto source = argHeader->Args[0];
+            auto sourceHeader = IREmit->GetOpHeader(source);
+            if (sourceHeader->Size >= flopSize) {
+              IREmit->ReplaceNodeArgument(CodeNode, i, IREmit->UnwrapNode(source));
+              //printf("VMOV bypassed\n");
+            }
+          }
+        }
+        break;
+      }
+
+      case OP_VMOV: {
+        // elim from load mem
+        auto source = IROp->Args[0];
+        auto sourceHeader = IREmit->GetOpHeader(source);
+
+        if (IROp->Size >= sourceHeader->Size  &&
+          (sourceHeader->Op == OP_LOADMEM || sourceHeader->Op == OP_LOADMEMTSO || sourceHeader->Op == OP_LOADCONTEXT)
+         ) {
+          //printf("Eliminated needless zext VMOV\n");
+          // Load mem / load ctx zexts, no need to vmem
+          IREmit->ReplaceAllUsesWith(CodeNode, CurrentIR.GetNode(source));
+        }
+        break;
+      }
     }
 
     // constprop + some more per instruction logic

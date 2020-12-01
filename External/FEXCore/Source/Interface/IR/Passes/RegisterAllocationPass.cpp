@@ -678,9 +678,12 @@ namespace FEXCore::IR {
           auto StaticMap = GetStaticMapFromOffset(Op->Offset);
           // if a read pending, it has been writting
           if ((*StaticMap)) {
-            uint32_t ID  = (*StaticMap) - &LiveRanges[0];
+            // old way of calculating this
+            //uint32_t ID  = (*StaticMap) - &LiveRanges[0];
+            // ID != Op->Value.ID() || IROp->Size != 8
+
             // writes to self don't invalidate the span
-            if (ID != Op->Value.ID() || IROp->Size != 8) {
+            if ((*StaticMap)->PreWritten != Node) {
               SRA_DEBUG("Markng ssa%d as written because ssa%d writes to sra%d with value ssa%d. Write size is %d\n", ID, Node, -1 /*vreg*/, Op->Value.ID(), IROp->Size);
               (*StaticMap)->Written = true;
             }

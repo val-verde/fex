@@ -263,6 +263,20 @@ bool ConstProp::Run(IREmitter *IREmit) {
           IREmit->ReplaceNodeArgument(CodeNode, 0, IREmit->UnwrapNode(newArg));
           Changed = true;
         }
+
+        if (Op->lsb == 0) {
+          //LoadMem, LoadMemTSO & LoadContext ZExt
+          auto source = IROp->Args[0];
+          auto sourceHeader = IREmit->GetOpHeader(source);
+
+          if (Op->Width >= (sourceHeader->Size*8)  &&
+            (sourceHeader->Op == OP_LOADMEM || sourceHeader->Op == OP_LOADMEMTSO || sourceHeader->Op == OP_LOADCONTEXT)
+          ) {
+            //printf("Eliminated needless zext bfe\n");
+            // Load mem / load ctx zexts, no need to vmem
+            IREmit->ReplaceAllUsesWith(CodeNode, CurrentIR.GetNode(source));
+          }
+        }
         break;
       }
 

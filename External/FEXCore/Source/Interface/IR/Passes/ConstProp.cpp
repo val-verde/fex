@@ -266,6 +266,23 @@ bool ConstProp::Run(IREmitter *IREmit) {
         break;
       }
 
+      case OP_SBFE: {
+        auto Op = IROp->C<IR::IROp_Sbfe>();
+
+        // BFE does implicit masking
+        uint64_t imm = 1ULL << (Op->Width-1);
+        imm = (imm-1) *2 + 1;
+        imm <<= Op->lsb;
+        
+        auto newArg = RemoveUselessMasking(IREmit, IROp->Args[0], imm);
+        
+        if (newArg != IROp->Args[0]) {
+          IREmit->ReplaceNodeArgument(CodeNode, 0, IREmit->UnwrapNode(newArg));
+          Changed = true;
+        }
+        break;
+      }
+
       case OP_VFADD:
       case OP_VFSUB:
       case OP_VFMUL:

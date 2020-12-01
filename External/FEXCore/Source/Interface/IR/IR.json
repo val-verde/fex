@@ -105,7 +105,10 @@
 
     "InvalidateFlags": {
       "OpClass": "Misc",
-      "HasSideEffects": true
+      "HasSideEffects": true,
+      "Args": [
+        "uint64_t", "Flags"
+      ]
     },
 
     "EndBlock": {

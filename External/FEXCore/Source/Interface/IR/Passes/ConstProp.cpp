@@ -269,7 +269,8 @@ bool ConstProp::Run(IREmitter *IREmit) {
       case OP_VFADD:
       case OP_VFSUB:
       case OP_VFMUL:
-      case OP_VFDIV: {
+      case OP_VFDIV:
+      case OP_FCMP: {
         auto flopSize = IROp->Size;
         for (int i = 0; i < IROp->NumArgs; i++) {
           auto argHeader = IREmit->GetOpHeader(IROp->Args[i]);
@@ -296,6 +297,10 @@ bool ConstProp::Run(IREmitter *IREmit) {
          ) {
           //printf("Eliminated needless zext VMOV\n");
           // Load mem / load ctx zexts, no need to vmem
+          IREmit->ReplaceAllUsesWith(CodeNode, CurrentIR.GetNode(source));
+        } else if (IROp->Size == sourceHeader->Size) {
+          // VMOV of same size
+          //printf("printf vmov of same size?!\n");
           IREmit->ReplaceAllUsesWith(CodeNode, CurrentIR.GetNode(source));
         }
         break;

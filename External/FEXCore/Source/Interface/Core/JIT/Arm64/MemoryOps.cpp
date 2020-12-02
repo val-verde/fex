@@ -181,15 +181,25 @@ DEF_OP(LoadRegister) {
         break;
 
       case 4:
-        assert(regOffs == 0);
-        if (host.GetCode() != guest.GetCode())
-          fmov(host.S(), guest.S());
+        //assert(regOffs == 0);
+        assert((regOffs & 3) == 0);
+        if (regOffs == 0) {
+          if (host.GetCode() != guest.GetCode())
+            fmov(host.S(), guest.S());
+        } else {
+          ins(host.V4S(), 0, guest.V4S(), regOffs/4);
+        }
         break;
 
       case 8:
-        assert(regOffs == 0);
-        if (host.GetCode() != guest.GetCode())
-          mov(host.D(), guest.D());
+        //assert(regOffs == 0);
+        assert((regOffs & 7) == 0);
+        if (regOffs == 0) {
+          if (host.GetCode() != guest.GetCode())
+            mov(host.D(), guest.D());
+        } else {
+          ins(host.V2D(), 0, guest.V2D(), regOffs/8);
+        }
         break;
 
       case 16:

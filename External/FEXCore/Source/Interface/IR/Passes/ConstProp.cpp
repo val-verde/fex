@@ -148,6 +148,7 @@ bool ConstProp::Run(IREmitter *IREmit) {
 
   auto HeaderOp = CurrentIR.GetHeader();
   
+  // Move arguments on select before select
   for (auto [BlockNode, BlockIROp] : CurrentIR.GetBlocks()) {
     auto BlockOp = BlockIROp->CW<FEXCore::IR::IROp_CodeBlock>();
     for (auto [UnaryOpNode, UnaryOpHdr] : CurrentIR.GetCode(BlockNode)) {
@@ -201,6 +202,26 @@ bool ConstProp::Run(IREmitter *IREmit) {
     }
   }
 
+  // FCMP optimization
+
+  // Make all FCMPs set no flags
+  for (auto [CodeNode, IROp] : CurrentIR.GetAllCode()) {
+    if (IROp->Op == OP_FCMP) {
+      auto fcmp = IROp->CW<IR::IROp_FCmp>();
+      fcmp->Flags = 0;
+    }
+  }
+
+  // Set needed flags
+  for (auto [CodeNode, IROp] : CurrentIR.GetAllCode()) {
+    if (IROp->Op == OP_GETHOSTFLAG) {
+      auto ghf = IROp->CW<IR::IROp_GetHostFlag>();
+
+      auto fcmp = IREmit->GetOpHeader(ghf->GPR)->CW<IR::IROp_FCmp>();
+      assert(fcmp->Header.Op == OP_FCMP);
+      fcmp->Flags |= 1 << ghf->Flag;
+    }
+  }
 
   for (auto [CodeNode, IROp] : CurrentIR.GetAllCode()) {
 

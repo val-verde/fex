@@ -6,10 +6,11 @@ namespace FEXCore::IR {
 
 void PassManager::AddDefaultPasses(bool InlineConstants) {
   InsertPass(CreateContextLoadStoreElimination());
-  InsertPass(CreateConstProp(InlineConstants));
   InsertPass(CreateDeadFlagStoreElimination());
   InsertPass(CreateDeadGPRStoreElimination());
   InsertPass(CreateDeadFPRStoreElimination());
+  InsertPass(CreatePassDeadCodeElimination());
+  InsertPass(CreateConstProp(InlineConstants));
 
   ////// InsertPass(CreateDeadFlagCalculationEliminination());
   InsertPass(CreateSyscallOptimization());

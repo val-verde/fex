@@ -144,9 +144,8 @@ bool IsBfeAlreadyDone(IREmitter *IREmit, OrderedNodeWrapper src, uint64_t Width)
     if (Width >= Op->Width) {
       return true;
     }
-  } else {
-    return false;
   }
+  return false;
 }
 
 bool ConstProp::Run(IREmitter *IREmit) {

@@ -28,9 +28,11 @@ namespace FEXCore {
 
     class ThunkHandler_impl final: public ThunkHandler {
         std::shared_mutex ThunksMutex;
+        void *calldladdr { 0 };
 
         std::map<std::string, ThunkedFunction*> Thunks = {
-            { "fex:loadlib", &LoadLib}
+            { "fex:loadlib", &LoadLib},
+            { "fex:DebugInit", &DebugInit}
         };
 
         /*
@@ -42,6 +44,11 @@ namespace FEXCore {
             Thread->State.State.gregs[FEXCore::X86State::REG_RSI] = (uintptr_t)arg1;
 
             Thread->CTX->HandleCallback((uintptr_t)callback);
+        }
+
+        static void DebugInit(void *calldladdr) {
+            auto That = reinterpret_cast<ThunkHandler_impl*>(Thread->CTX->ThunkHandler.get());
+            That->calldladdr = calldladdr;
         }
 
         static void LoadLib(void *ArgsV) {
@@ -102,6 +109,10 @@ namespace FEXCore {
 
         public:
 
+        void *GetGuestDlAddr() {
+            return calldladdr;
+        }
+        
         ThunkedFunction* LookupThunk(const char *Name) {
 
             std::shared_lock lk(ThunksMutex);

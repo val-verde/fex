@@ -86,7 +86,7 @@ namespace FEXCore::Core {
 
     int StatusCode{};
     FEXCore::Context::ExitReason ExitReason {FEXCore::Context::ExitReason::EXIT_WAITING};
-
+    bool InSafeCallback {false};
   };
   static_assert(offsetof(InternalThreadState, State) == 0, "InternalThreadState must have State be the first object");
   static_assert(std::is_standard_layout<InternalThreadState>::value, "This needs to be standard layout");

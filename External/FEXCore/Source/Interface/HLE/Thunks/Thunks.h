@@ -12,6 +12,7 @@ namespace FEXCore {
         virtual ThunkedFunction* LookupThunk(const char *name) = 0;
         virtual void RegisterTLSState(FEXCore::Core::InternalThreadState *Thread) = 0;
         virtual ~ThunkHandler() { }
+        virtual void *GetGuestDlAddr() = 0;
 
         static ThunkHandler* Create();
     };

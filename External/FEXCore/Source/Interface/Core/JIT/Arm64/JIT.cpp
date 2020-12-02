@@ -1056,9 +1056,9 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     mov(x2, lr);
     
     ldr(x3, &l_ExitFunctionLink);
-    SpillStaticRegs(true);
+    SpillStaticRegs(false);
     blr(x3);
-    FillStaticRegs(true);
+    FillStaticRegs(false);
     br(x0);
   }
 
@@ -1075,9 +1075,9 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     ldr(x3, &l_CompileBlock);
 
     // X2 contains our guest RIP
-    SpillStaticRegs(true);
+    SpillStaticRegs(false);
     blr(x3); // { CTX, ThreadState, RIP}
-    FillStaticRegs(true);
+    FillStaticRegs(false);
 
     // X0 now contains either nullptr or block pointer
     cbz(x0, &FallbackCore);
@@ -1095,9 +1095,9 @@ void JITCore::CreateCustomDispatch(FEXCore::Core::InternalThreadState *Thread) {
     ldr(x3, &l_CompileFallback);
 
     // X2 contains our guest RIP
-    SpillStaticRegs(true);
+    SpillStaticRegs(false);
     blr(x3); // {ThreadState, RIP}
-    FillStaticRegs(true);
+    FillStaticRegs(false);
 
     // X0 now contains either nullptr or block pointer
     cbz(x0, &Exit);

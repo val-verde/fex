@@ -61,3 +61,6 @@ add_guest_lib(Xrender)
 
 generate(libXfixes thunks function_packs function_packs_public)
 add_guest_lib(Xfixes)
+
+add_guest_lib(FEXDebug)
+target_link_libraries(FEXDebug-guest PRIVATE dl)

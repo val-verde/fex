@@ -17,13 +17,17 @@
 #include <FEXCore/Core/CoreState.h>
 #include <FEXCore/Core/CPUBackend.h>
 #include <FEXCore/Core/X86Enums.h>
+#include <FEXCore/Core/CoreState.h>
 
 #include "Interface/HLE/Thunks/Thunks.h"
 
 #include <fstream>
 #include <unistd.h>
+#include <filesystem>
 
 #include "Interface/Core/GdbServer.h"
+
+#include "../../../../../ThunkLibs/libFEXDebug/libFEXDebug.h"
 
 constexpr uint64_t STACK_OFFSET = 0xc000'0000;
 
@@ -318,6 +322,18 @@ namespace FEXCore::Context {
   void Context::HandleCallback(uint64_t RIP) {
     auto Thread = Core::ThreadData.Thread;
     Thread->CPUBackend->CallbackPtr(Thread, RIP);
+  }
+
+  void Context::SafeCallback(FEXCore::Core::InternalThreadState *Thread, uint64_t RIP, uint64_t arg0) {
+    FEXCore::Core::CPUState StateBackup;
+    memcpy(&StateBackup, &Thread->State.State, sizeof(StateBackup));
+    void* stack = alloca(64 * 1024);
+    Thread->State.State.gregs[FEXCore::X86State::REG_RDI] = (uintptr_t)arg0;
+    Thread->State.State.gregs[FEXCore::X86State::REG_RSP] = (uintptr_t)stack + 63 * 1024;
+    Thread->InSafeCallback = true;
+    Thread->CPUBackend->CallbackPtr(Thread, RIP);
+    Thread->InSafeCallback = false;
+    memcpy(&Thread->State.State, &StateBackup, sizeof(Thread->State.State));
   }
 
   void Context::RegisterFrontendHostSignalHandler(int Signal, HostSignalDelegatorFunction Func) {
@@ -812,17 +828,44 @@ namespace FEXCore::Context {
 
     if (CodePtr != nullptr) {
       // The core managed to compile the code.
+
+      auto rv = AddBlockMapping(Thread, GuestRIP, CodePtr);
+      
+      std::string name = "unresolved";
+
+      if (ThunkHandler->GetGuestDlAddr() && !Thread->InSafeCallback) {
+        uint64_t GuestDlAddr = (uint64_t)ThunkHandler->GetGuestDlAddr();
+        dladdr_info info;
+        dladdr_params params;
+        params.addr = (void*)GuestRIP;
+        params.info = &info;
+
+        SafeCallback(Thread, GuestDlAddr, (uint64_t)&params);
+
+        if (params.rv == 1) {
+          if (info.dli_fname) {
+            std::filesystem::path p(info.dli_fname);
+            name = p.filename();
+          }
+          
+          if (info.dli_sname){
+            name += "__";
+            name += info.dli_sname;
+          }
+        }
+        //printf("Guest info: %d, %s %p %s %p\n", params.rv, info.dli_fname, info.dli_fbase, info.dli_sname, info.dli_saddr);
+      }
 #if ENABLE_JITSYMBOLS
     if (DebugData->Subblocks.size()) {
       for (auto& Subblock: DebugData->Subblocks) {
-        Symbols.Register((void*)Subblock.HostCodeStart, GuestRIP, Subblock.HostCodeSize);
+        Symbols.Register((void*)Subblock.HostCodeStart, GuestRIP, Subblock.HostCodeSize, name);
       }
     } else {
-      Symbols.Register(CodePtr, GuestRIP, DebugData->HostCodeSize);
+      Symbols.Register(CodePtr, GuestRIP, DebugData->HostCodeSize, name);
     }
 #endif
 
-      return AddBlockMapping(Thread, GuestRIP, CodePtr);
+      return rv;
     }
 
     return 0;

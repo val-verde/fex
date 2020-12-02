@@ -22,13 +22,13 @@ namespace FEXCore {
     }
   }
 
-  void JITSymbols::Register(void *HostAddr, uint64_t GuestAddr, uint32_t CodeSize) {
+  void JITSymbols::Register(void *HostAddr, uint64_t GuestAddr, uint32_t CodeSize, const std::string& name) {
     if (!fp) return;
 
     // Linux perf format is very straightforward
     // `<HostPtr> <Size> <Name>\n`
     std::stringstream String;
-    String << std::hex << HostAddr << " " << CodeSize << " " << "JIT_0x" << GuestAddr << "_" << HostAddr << std::endl;
+    String << std::hex << HostAddr << " " << CodeSize << " " << "JIT_" << name << "_0x" << GuestAddr << "_" << HostAddr << std::endl;
     fwrite(String.str().c_str(), 1, String.str().size(), fp);
   }
 }

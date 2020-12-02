@@ -120,6 +120,8 @@ namespace FEXCore::Context {
     void StartGdbServer();
     void StopGdbServer();
     void HandleCallback(uint64_t RIP);
+    void SafeCallback(FEXCore::Core::InternalThreadState *Thread, uint64_t RIP, uint64_t arg0);
+
     void RegisterFrontendHostSignalHandler(int Signal, HostSignalDelegatorFunction Func);
 
     static void RemoveCodeEntry(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP);

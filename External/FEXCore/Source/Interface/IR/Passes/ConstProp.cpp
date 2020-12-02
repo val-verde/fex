@@ -223,6 +223,31 @@ bool ConstProp::Run(IREmitter *IREmit) {
     }
   }
 
+  std::map<OrderedNode*, uint64_t> Consts;
+  for (auto [BlockNode, BlockIROp] : CurrentIR.GetBlocks()) {
+    Consts.clear();
+    for (auto [CodeNode, IROp] : CurrentIR.GetCode(BlockNode)) {
+      if (IROp->Op == OP_LOADMEM) {
+        uint64_t Addr;
+
+        if (IREmit->IsValueConstant(IROp->Args[0], &Addr) && IROp->Args[1].IsInvalid()) {
+          for (auto& Const: Consts) {
+            if ((Addr - Const.second) < 65536) {
+              IREmit->ReplaceNodeArgument(CodeNode, 0, Const.first);
+              IREmit->ReplaceNodeArgument(CodeNode, 1, IREmit->_Constant(Addr - Const.second));
+              //printf("LDR combined const\n");
+              goto doneOp;
+            }
+          }
+
+          Consts[IREmit->UnwrapNode(IROp->Args[0])] = Addr;
+        }
+        doneOp:
+        ;
+      }
+      IREmit->SetWriteCursor(CodeNode);
+    }
+  }
   for (auto [CodeNode, IROp] : CurrentIR.GetAllCode()) {
 
     // zext / masking elimination
@@ -354,6 +379,21 @@ bool ConstProp::Run(IREmitter *IREmit) {
           // VMOV of same size
           //printf("printf vmov of same size?!\n");
           IREmit->ReplaceAllUsesWith(CodeNode, CurrentIR.GetNode(source));
+        }
+        break;
+      }
+
+      case OP_VINSELEMENT: {
+        auto Op = IROp->C<IR::IROp_VInsElement>();
+        if (Op->DestIdx == 0 && Op->SrcIdx == 0) {
+          auto BigReg = IREmit->GetOpHeader(Op->Header.Args[0]);
+          auto SmallReg = IREmit->GetOpHeader(Op->Header.Args[1]);
+
+          if (IROp->Size == IROp->ElementSize && SmallReg->Size == IROp->ElementSize) {
+            IREmit->ReplaceAllUsesWith(CodeNode, CurrentIR.GetNode(Op->Header.Args[1]));
+            printf("Removed VINSELEMENT\n");
+            Changed = true;
+          }
         }
         break;
       }

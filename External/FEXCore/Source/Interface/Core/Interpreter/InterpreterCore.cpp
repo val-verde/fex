@@ -4317,18 +4317,19 @@ void InterpreterCore::ExecuteCode(FEXCore::Core::InternalThreadState *Thread) {
             if (Op->ElementSize == 4) {
               float Src1 = *GetSrc<float*>(SSAData, Op->Header.Args[0]);
               float Src2 = *GetSrc<float*>(SSAData, Op->Header.Args[1]);
+              bool Unordred = std::isnan(Src1) || std::isnan(Src2);
               if (Op->Flags & (1 << FCMP_FLAG_LT)) {
-                if (Src1 < Src2) {
+                if (Unordred || (Src1 < Src2)) {
                   ResultFlags |= (1 << FCMP_FLAG_LT);
                 }
               }
               if (Op->Flags & (1 << FCMP_FLAG_UNORDERED)) {
-                if (std::isnan(Src1) || std::isnan(Src2)) {
+                if (Unordred) {
                   ResultFlags |= (1 << FCMP_FLAG_UNORDERED);
                 }
               }
               if (Op->Flags & (1 << FCMP_FLAG_EQ)) {
-                if (Src1 == Src2) {
+                if (Unordred || (Src1 == Src2)) {
                   ResultFlags |= (1 << FCMP_FLAG_EQ);
                 }
               }
@@ -4336,18 +4337,19 @@ void InterpreterCore::ExecuteCode(FEXCore::Core::InternalThreadState *Thread) {
             else {
               double Src1 = *GetSrc<double*>(SSAData, Op->Header.Args[0]);
               double Src2 = *GetSrc<double*>(SSAData, Op->Header.Args[1]);
+              bool Unordred = std::isnan(Src1) || std::isnan(Src2);
               if (Op->Flags & (1 << FCMP_FLAG_LT)) {
-                if (Src1 < Src2) {
+                if (Unordred || (Src1 < Src2)) {
                   ResultFlags |= (1 << FCMP_FLAG_LT);
                 }
               }
               if (Op->Flags & (1 << FCMP_FLAG_UNORDERED)) {
-                if (std::isnan(Src1) || std::isnan(Src2)) {
+                if (Unordred) {
                   ResultFlags |= (1 << FCMP_FLAG_UNORDERED);
                 }
               }
               if (Op->Flags & (1 << FCMP_FLAG_EQ)) {
-                if (Src1 == Src2) {
+                if (Unordred || (Src1 == Src2)) {
                   ResultFlags |= (1 << FCMP_FLAG_EQ);
                 }
               }

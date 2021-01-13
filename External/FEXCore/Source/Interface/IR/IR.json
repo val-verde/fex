@@ -346,6 +346,11 @@
       "SSAArgs": "1",
       "SSANames": [
         "NewRIP"
+      ],
+      "Args": [
+        "bool", "HasNextRIP",
+        "uint64_t", "NextRIP",
+        "bool", "IsReturn"
       ]
     },
 

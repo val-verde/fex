@@ -542,8 +542,13 @@ namespace FEXCore::Context {
 
     // Grab the new thread object
     {
+      struct ITS2 {
+        uint64_t retcache[2];
+        FEXCore::Core::InternalThreadState its{};
+      };
+
       std::lock_guard<std::mutex> lk(ThreadCreationMutex);
-      Thread = Threads.emplace_back(new FEXCore::Core::InternalThreadState{});
+      Thread = Threads.emplace_back(&(new ITS2)->its);
       Thread->State.ThreadManager.TID = ++ThreadID;
     }
 

@@ -169,7 +169,7 @@ void OpDispatchBuilder::RETOp(OpcodeArgs) {
   _StoreContext(GPRClass, GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RSP]), NewSP);
 
   // Store the new RIP
-  _ExitFunction(NewRIP);
+  _ExitFunction(NewRIP, true);
   BlockSetRIP = true;
 }
 
@@ -642,7 +642,8 @@ void OpDispatchBuilder::CALLOp(OpcodeArgs) {
   OrderedNode *JMPPCOffset = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
 
   OrderedNode *NewRIP = _Add(JMPPCOffset, ConstantPC);
-  auto ConstantPCReturn = _Constant(Op->PC + Op->InstSize);
+  uint64_t PCReturn = Op->PC + Op->InstSize;
+  auto ConstantPCReturn = _Constant(PCReturn);
 
   auto ConstantSize = _Constant(GPRSize);
   auto OldSP = _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RSP]), GPRClass);
@@ -655,7 +656,7 @@ void OpDispatchBuilder::CALLOp(OpcodeArgs) {
   _StoreMem(GPRClass, GPRSize, NewSP, ConstantPCReturn, GPRSize);
 
   // Store the RIP
-  _ExitFunction(NewRIP); // If we get here then leave the function now
+  _ExitFunction(NewRIP, PCReturn); // If we get here then leave the function now
 }
 
 void OpDispatchBuilder::CALLAbsoluteOp(OpcodeArgs) {
@@ -665,7 +666,8 @@ void OpDispatchBuilder::CALLAbsoluteOp(OpcodeArgs) {
   uint8_t Size = GetSrcSize(Op);
   OrderedNode *JMPPCOffset = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
 
-  auto ConstantPCReturn = _Constant(Op->PC + Op->InstSize);
+  uint64_t PCReturn = Op->PC + Op->InstSize;
+  auto ConstantPCReturn = _Constant(PCReturn);
 
   auto ConstantSize = _Constant(Size);
   auto OldSP = _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RSP]), GPRClass);
@@ -678,7 +680,7 @@ void OpDispatchBuilder::CALLAbsoluteOp(OpcodeArgs) {
   _StoreMem(GPRClass, Size, NewSP, ConstantPCReturn, Size);
 
   // Store the RIP
-  _ExitFunction(JMPPCOffset); // If we get here then leave the function now
+  _ExitFunction(JMPPCOffset, PCReturn); // If we get here then leave the function now
 }
 
 OrderedNode *OpDispatchBuilder::SelectCC(uint8_t OP, OrderedNode *TrueValue, OrderedNode *FalseValue) {

@@ -358,6 +358,14 @@ friend class FEXCore::IR::PassManager;
     return InvalidNode;
   }
 
+  IRPair<IROp_ExitFunction> _ExitFunction(OrderedNode *ssa0, bool IsReturn = false) {
+    return _ExitFunction(ssa0, false, 0, IsReturn);
+  }
+
+  IRPair<IROp_ExitFunction> _ExitFunction(OrderedNode *ssa0, uint64_t NextRIP) {
+    return _ExitFunction(ssa0, true, NextRIP, false);
+  }
+
   void AddPhiValue(IR::IROp_Phi *Phi, OrderedNode *Value) {
     // Got to do some bookkeeping first
     Value->AddUse();

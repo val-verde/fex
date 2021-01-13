@@ -63,6 +63,7 @@ DEF_OP(ExitFunction) {
   auto Op = IROp->C<IR::IROp_ExitFunction>();
 
   Label FullLookup;
+  Label ReturnMatched;
 
   if (SpillSlots) {
     add(sp, sp, SpillSlots * 16);
@@ -71,26 +72,65 @@ DEF_OP(ExitFunction) {
   aarch64::Register RipReg;
   uint64_t NewRIP;
 
+
   if (IsInlineConstant(Op->NewRIP, &NewRIP)) {
-    uintptr_t CacheEntry = State->BlockCache->GetL1Pointer() + (NewRIP & BlockCache::L1_ENTRIES_MASK) * 16;
-    LoadConstant(x0, CacheEntry);
+
+    if (Op->IsReturn) {
+      sub(x0, STATE, 16);
+    } else {
+      uintptr_t CacheEntry = State->BlockCache->GetL1Pointer() + (NewRIP & BlockCache::L1_ENTRIES_MASK) * 16;
+      LoadConstant(x0, CacheEntry);
+    }
 
     RipReg = x2;
     LoadConstant(RipReg, NewRIP);
   } else {
     RipReg = GetReg<RA_64>(Op->Header.Args[0].ID());
     
-    // L1 Cache
-    LoadConstant(x0, State->BlockCache->GetL1Pointer());
+    if (Op->IsReturn) {
+      sub(x0, STATE, 16);
+    } else {
+      // L1 Cache
+      LoadConstant(x0, State->BlockCache->GetL1Pointer());
 
-    and_(x3, RipReg, BlockCache::L1_ENTRIES_MASK);
-    add(x0, x0, Operand(x3, Shift::LSL, 4));
+      and_(x3, RipReg, BlockCache::L1_ENTRIES_MASK);
+      add(x0, x0, Operand(x3, Shift::LSL, 4));
+    }
   }
 
   ldp(x1, x0, MemOperand(x0));
   cmp(x0, RipReg);
   b(&FullLookup, Condition::ne);
-  br(x1);
+
+  if (Op->HasNextRIP) {
+    LoadConstant(x3, Op->NextRIP);
+    adr(x0, &ReturnMatched);
+    stp(x0, x3, MemOperand(STATE, -16));
+  }
+
+  if (Op->IsReturn) {
+    ret(x1);
+  } else {
+    br(x1);
+  }
+
+  if (Op->HasNextRIP) {
+    Label FullLookup2;
+    bind(&ReturnMatched);
+
+    uintptr_t CacheEntry = State->BlockCache->GetL1Pointer() + (Op->NextRIP & BlockCache::L1_ENTRIES_MASK) * 16;
+    LoadConstant(x0, CacheEntry);
+
+    LoadConstant(x2, Op->NextRIP);
+    ldp(x1, x0, MemOperand(x0));
+    cmp(x0, x2);
+    b(&FullLookup2, Condition::ne);
+    br(x1);
+    bind(&FullLookup2);
+    LoadConstant(TMP1, AbsoluteLoopTopAddress);
+    str(x2, MemOperand(STATE, offsetof(FEXCore::Core::ThreadState, State.rip)));
+    br(TMP1);
+  }
 
   bind(&FullLookup);
   LoadConstant(TMP1, AbsoluteLoopTopAddress);

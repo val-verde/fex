@@ -49,6 +49,8 @@ namespace FEXCore::Core {
     uint64_t HostCodeSize; ///< The size of the code generated in the host JIT
     uint64_t GuestCodeSize; ///< The size of the guest side code
     uint64_t GuestInstructionCount; ///< Number of guest instructions
+    uint64_t MinAddress;
+    uint64_t MaxAddress;
     uint64_t TimeSpentInCode; ///< How long this code has spent time running
     uint64_t RunCount; ///< Number of times this block of code has been run
     std::vector<DebugDataSubblock> Subblocks;
@@ -90,6 +92,8 @@ namespace FEXCore::Core {
     uint32_t CompileBlockReentrantRefCount{};
     std::shared_ptr<FEXCore::CompileService> CompileService;
     bool IsCompileService{false};
+
+    void FlushCacheRange(uint64_t Begin, uint64_t End);
   };
   static_assert(offsetof(InternalThreadState, State) == 0, "InternalThreadState must have State be the first object");
   static_assert(std::is_standard_layout<InternalThreadState>::value, "This needs to be standard layout");

@@ -125,6 +125,7 @@ namespace FEXCore::Context {
     };
 
     std::map<uint64_t, AddrToFileEntry> AddrToFile;
+    std::map<uint64_t, std::vector<std::tuple<FEXCore::Core::InternalThreadState *, uint64_t>>> CodePages;
 
 
 #ifdef BLOCKSTATS
@@ -192,6 +193,7 @@ namespace FEXCore::Context {
 
     void AddNamedRegion(uintptr_t Base, uintptr_t Size, uintptr_t Offset, const std::string &filename);
     void RemoveNamedRegion(uintptr_t Base, uintptr_t Size);
+    void FlushCodeRange(uint64_t Begin, uint64_t End);
 
 #if ENABLE_JITSYMBOLS
     FEXCore::JITSymbols Symbols;
@@ -206,7 +208,7 @@ namespace FEXCore::Context {
     void ExecutionThread(FEXCore::Core::InternalThreadState *Thread);
     void NotifyPause();
 
-    void AddBlockMapping(FEXCore::Core::InternalThreadState *Thread, uint64_t Address, void *Ptr);
+    void AddBlockMapping(FEXCore::Core::InternalThreadState *Thread, uint64_t Address, void *Ptr, uint64_t Begin, uint64_t End);
 
     FEXCore::CodeLoader *LocalLoader{};
 

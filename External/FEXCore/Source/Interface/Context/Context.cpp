@@ -133,6 +133,11 @@ namespace FEXCore::Context {
 
       // Setting running to false ensures that when they are shutdown we won't send signals to kill them
       DeadThread->State.RunningEvents.Running = false;
+
+      if (CTX->Config.AOTIRCapture) {
+        LogMan::Msg::E("Forked process can't capture AOTIR cache");
+        CTX->Config.AOTIRCapture = false;
+      }
     }
 
     // We now only have one thread
@@ -164,6 +169,10 @@ namespace FEXCore::Context {
   }
   void RemoveNamedRegion(FEXCore::Context::Context *CTX, uintptr_t Base, uintptr_t Length) {
     return CTX->RemoveNamedRegion(Base, Length);
+  }
+
+  void FlushCodeRange(FEXCore::Context::Context *CTX, uint64_t Begin, uint64_t End) {
+    CTX->FlushCodeRange(Begin, End);
   }
 
 namespace Debug {

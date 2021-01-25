@@ -845,7 +845,7 @@ bool ConstProp::Run(IREmitter *IREmit) {
           auto Op = IROp->C<IR::IROp_ExitFunction>();
 
           uint64_t Constant{};
-          if (IREmit->IsValueConstant(Op->NewRIP, &Constant)) {
+          if (false && IREmit->IsValueConstant(Op->NewRIP, &Constant)) {
             
             IREmit->SetWriteCursor(CurrentIR.GetNode(Op->NewRIP));
 

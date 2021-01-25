@@ -68,5 +68,7 @@ void LookupCache::ClearCache() {
   BlockList.clear();
 }
 
+#include "Interface/Core/InternalThreadState.h"
+
 }
 

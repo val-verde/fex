@@ -238,4 +238,5 @@ namespace FEXCore::Context {
   void RemoveNamedRegion(FEXCore::Context::Context *CTX, uintptr_t Base, uintptr_t Length);
   void SetAOTIRLoader(FEXCore::Context::Context *CTX, std::function<std::unique_ptr<std::istream>(const std::string&)> CacheReader);
   bool WriteAOTIR(FEXCore::Context::Context *CTX, std::function<std::unique_ptr<std::ostream>(const std::string&)> CacheWriter);
+  void FlushCodeRange(FEXCore::Context::Context *CTX, uint64_t Begin, uint64_t End);
 }

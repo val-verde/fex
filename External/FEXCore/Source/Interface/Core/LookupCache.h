@@ -195,6 +195,7 @@ private:
     }
   };
 
+
   std::map<BlockLinkTag, std::function<void()>> BlockLinks;
   std::map<uint64_t, uint64_t> BlockList;
 

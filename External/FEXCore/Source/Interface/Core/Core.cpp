@@ -78,7 +78,8 @@ namespace FEXCore::CPU {
   }
 }
 
-static std::mutex AOTCacheLock;
+static std::recursive_mutex AOTCacheLock;
+static std::mutex CodePagesLock;
 
 namespace FEXCore::Core {
 struct ThreadLocalData {
@@ -598,8 +599,15 @@ namespace FEXCore::Context {
 
     return Thread;
   }
+    
+  void Context::AddBlockMapping(FEXCore::Core::InternalThreadState *Thread, uint64_t Address, void *Ptr, uint64_t Begin, uint64_t End) {
+    {
+      std::lock_guard<std::mutex> lk(CodePagesLock);
+      for (auto CurrentPage = Begin >> 12, EndPage = End >> 12; CurrentPage <= EndPage; CurrentPage++) {
+        CodePages[CurrentPage].emplace_back(Thread, Address);
+      }
+    }
 
-  void Context::AddBlockMapping(FEXCore::Core::InternalThreadState *Thread, uint64_t Address, void *Ptr) {
     Thread->LookupCache->AddBlockMapping(Address, Ptr);
   }
 
@@ -828,10 +836,12 @@ namespace FEXCore::Context {
       RAData = Thread->RALists.find(GuestRIP)->second.get();
 
       GeneratedIR = false;
+      MinAddr = DebugData->MinAddress;
+      MaxAddr = DebugData->MaxAddress;
     }
 
     if (IRList == nullptr && Config.AOTIRLoad) {
-      std::lock_guard<std::mutex> lk(AOTCacheLock);
+      std::lock_guard<std::recursive_mutex> lk(AOTCacheLock);
       auto file = AddrToFile.lower_bound(GuestRIP);
       if (file != AddrToFile.begin()) {
         --file;
@@ -845,15 +855,26 @@ namespace FEXCore::Context {
         
         if (AOTEntry != Mod->end()) {
           // verify hash
-          auto hash = fasthash64((void*)(AOTEntry->second.start + file->second.Start  - file->second.Offset), AOTEntry->second.len, 0);
+          uint64_t GuestStart = AOTEntry->second.start + file->second.Start  - file->second.Offset;
+          uint64_t GuestEnd = GuestStart + AOTEntry->second.len;
+          auto hash = fasthash64((void*)GuestStart, AOTEntry->second.len, 0);
           if (hash == AOTEntry->second.crc) {
-            IRList = AOTEntry->second.IR;
+            IRList = AOTEntry->second.IR->CreateCopy();
             //LogMan::Msg::D("using %s + %lx -> %lx\n", file->second.fileid.c_str(), AOTEntry->first, GuestRIP);
             // relocate
             IRList->GetHeader()->Entry = GuestRIP;
 
             RAData = AOTEntry->second.RAData;
+
+            auto RADataCopy = (decltype(RAData))malloc(RAData->Size(RAData->MapCount));
+            memcpy(RADataCopy, RAData, RAData->Size(RAData->MapCount));
+
+            RAData = RADataCopy;
+            
             DebugData = new FEXCore::Core::DebugData();
+
+            MinAddr = DebugData->MinAddress = GuestStart;
+            MaxAddr = DebugData->MaxAddress = GuestEnd;
 
             GeneratedIR = true;
           }
@@ -875,6 +896,8 @@ namespace FEXCore::Context {
       // Initialize metadata
       DebugData->GuestCodeSize = TotalInstructionsLength;
       DebugData->GuestInstructionCount = TotalInstructions;
+      DebugData->MinAddress = MinAddr;
+      DebugData->MaxAddress = MaxAddr;
 
       // Increment stats
       Thread->Stats.BlocksCompiled.fetch_add(1);
@@ -888,7 +911,7 @@ namespace FEXCore::Context {
   }
 
   bool Context::LoadAOTIRCache(std::istream &stream) {
-    std::lock_guard<std::mutex> lk(AOTCacheLock);
+    std::lock_guard<std::recursive_mutex> lk(AOTCacheLock);
     uint64_t tag;
     stream.read((char*)&tag, sizeof(tag));
     if (!stream || tag != 0xDEADBEEFC0D30002)
@@ -967,7 +990,7 @@ namespace FEXCore::Context {
   }
 
   bool Context::WriteAOTIRCache(std::function<std::unique_ptr<std::ostream>(const std::string&)> CacheWriter) {
-    std::lock_guard<std::mutex> lk(AOTCacheLock);
+    std::lock_guard<std::recursive_mutex> lk(AOTCacheLock);
 
     bool rv = true;
 
@@ -1039,6 +1062,8 @@ namespace FEXCore::Context {
       IRList = WorkItem->IRList;
       DebugData = WorkItem->DebugData;
       RAData = WorkItem->RAData;
+      MinAddress = WorkItem->DebugData->MinAddress;
+      MaxAddress = WorkItem->DebugData->MaxAddress;
       WorkItem->SafeToClear = true;
 
       // The compile service will always generate IR + DebugData + RAData
@@ -1081,7 +1106,7 @@ namespace FEXCore::Context {
 
       // Add to AOT cache if aot generation is enabled
       if (Config.AOTIRCapture && RAData && MinAddress) {
-        std::lock_guard<std::mutex> lk(AOTCacheLock);
+        std::lock_guard<std::recursive_mutex> lk(AOTCacheLock);
         auto RADataCopy = (decltype(RAData))malloc(RAData->Size(RAData->MapCount));
         memcpy(RADataCopy, RAData, RAData->Size(RAData->MapCount));
         auto len = MaxAddress - MinAddress;
@@ -1101,14 +1126,9 @@ namespace FEXCore::Context {
       --Thread->CompileBlockReentrantRefCount;
 
     // Insert to lookup cache
-    AddBlockMapping(Thread, GuestRIP, CodePtr);
+    AddBlockMapping(Thread, GuestRIP, CodePtr, MinAddress, MaxAddress);
 
     return (uintptr_t)CodePtr;
-
-    if (DecrementRefCount)
-      --Thread->CompileBlockReentrantRefCount;
-
-    return 0;
   }
 
   void Context::ExecutionThread(FEXCore::Core::InternalThreadState *Thread) {
@@ -1159,6 +1179,16 @@ namespace FEXCore::Context {
     IdleWaitCV.notify_all();
 
     SignalDelegation->UninstallTLSState(Thread);
+  }
+
+  void Context::FlushCodeRange(uint64_t Begin, uint64_t End) {
+    std::lock_guard<std::mutex> lk(CodePagesLock);
+
+    for (auto CurrentPage = Begin >> 12, EndPage = End >> 12; CurrentPage <= EndPage; CurrentPage++) {
+      for (auto [Thread, GuestAddr]: CodePages[CurrentPage])
+        Context::RemoveCodeEntry(Thread, GuestAddr);
+      CodePages[CurrentPage].clear();
+    }
   }
 
   void Context::RemoveCodeEntry(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP) {
@@ -1242,6 +1272,7 @@ namespace FEXCore::Context {
   }
 
   void Context::AddNamedRegion(uintptr_t Base, uintptr_t Size, uintptr_t Offset, const std::string &filename) {
+    std::lock_guard<std::recursive_mutex> lk(AOTCacheLock);
     // TODO: Support overlapping maps and region splitting
     auto base_filename = filename.substr(filename.find_last_of("/\\") + 1);
     if (base_filename.size()) {
@@ -1261,6 +1292,7 @@ namespace FEXCore::Context {
   }
 
   void Context::RemoveNamedRegion(uintptr_t Base, uintptr_t Size) {
+    std::lock_guard<std::recursive_mutex> lk(AOTCacheLock);
     // TODO: Support partial removing
     AddrToFile.erase(Base);
   }

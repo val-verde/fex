@@ -1022,9 +1022,10 @@ bool Decoder::DecodeInstructionsAtEntry(uint8_t const* _InstStream, uint64_t PC)
         CurrentBlockDecoding.HasInvalidInstruction = true;
         break;
       }
-
+      
       DecodedMinAddress = std::min(DecodedMinAddress, RIPToDecode + PCOffset);
       DecodedMaxAddress = std::max(DecodedMaxAddress, RIPToDecode + PCOffset + DecodeInst->InstSize);
+      
       ++TotalInstructions;
       ++BlockNumberOfInstructions;
       ++DecodedSize;

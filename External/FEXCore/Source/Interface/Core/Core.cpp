@@ -870,7 +870,7 @@ namespace FEXCore::Context {
             memcpy(RADataCopy, RAData, RAData->Size(RAData->MapCount));
 
             RAData = RADataCopy;
-            
+
             DebugData = new FEXCore::Core::DebugData();
 
             MinAddr = DebugData->MinAddress = GuestStart;
@@ -1183,11 +1183,13 @@ namespace FEXCore::Context {
 
   void Context::FlushCodeRange(uint64_t Begin, uint64_t End) {
     std::lock_guard<std::mutex> lk(CodePagesLock);
-
-    for (auto CurrentPage = Begin >> 12, EndPage = End >> 12; CurrentPage <= EndPage; CurrentPage++) {
-      for (auto [Thread, GuestAddr]: CodePages[CurrentPage])
-        Context::RemoveCodeEntry(Thread, GuestAddr);
-      CodePages[CurrentPage].clear();
+    auto lower = CodePages.lower_bound(Begin >> 12);
+    auto upper = CodePages.upper_bound(End >> 12);
+    
+    for (auto it = lower; it != upper; it++) {
+      for (auto [Thread, Address]: it->second) 
+        Context::RemoveCodeEntry(Thread, Address);
+      it->second.clear();
     }
   }
 

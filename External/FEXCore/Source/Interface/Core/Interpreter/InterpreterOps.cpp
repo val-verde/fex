@@ -406,7 +406,7 @@ static void SignalReturn(FEXCore::Core::InternalThreadState *Thread) {
   std::unexpected();
 }
 
-void InterpreterOps::InterpretIR(FEXCore::Core::InternalThreadState *Thread, FEXCore::IR::IRListView<true> *CurrentIR, FEXCore::Core::DebugData *DebugData) {
+void InterpreterOps::InterpretIR(FEXCore::Core::InternalThreadState *Thread, FEXCore::IR::IRListView *CurrentIR, FEXCore::Core::DebugData *DebugData) {
   volatile void* stack = alloca(0);
 
   // Debug data is only passed in debug builds

@@ -100,7 +100,7 @@ namespace FEX::HLE::x64 {
 
           auto fileid = base_filename + "-" + std::to_string(filename_hash);
 
-          printf("%lX - %ld -> %s -> %s\n", Result, length, fileid.c_str(), filename.c_str());
+          //fprintf(stderrr, "mmap: %lX - %ld -> %s -> %s\n", Result, length, fileid.c_str(), filename.c_str());
           AddrToFile.insert({ Result, { Result, length, (uint64_t)offset, fileid } });
         }
       }

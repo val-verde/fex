@@ -694,8 +694,8 @@ namespace FEXCore::Context {
           // auto OldPC = Thread->OpDispatcher->_LoadContext(8, offsetof(FEXCore::Core::CPUState, rip), IR::GPRClass);
           // auto NewPC = Thread->OpDispatcher->_Add(OldPC, Thread->OpDispatcher->_Constant(8, DecodedInfo->InstSize));
           // Thread->OpDispatcher->_StoreContext(IR::GPRClass, 8, offsetof(FEXCore::Core::CPUState, rip), NewPC);
-          auto NewPC = Thread->OpDispatcher->_Constant(8, DecodedInfo->PC + DecodedInfo->InstSize);
-          Thread->OpDispatcher->_StoreContext(IR::GPRClass, 8, offsetof(FEXCore::Core::CPUState, rip), NewPC);
+          //auto NewPC = Thread->OpDispatcher->_Constant(8, DecodedInfo->PC + DecodedInfo->InstSize);
+          //Thread->OpDispatcher->_StoreContext(IR::GPRClass, 8, offsetof(FEXCore::Core::CPUState, rip), NewPC);
           std::invoke(Fn, Thread->OpDispatcher, DecodedInfo);
           if (Thread->OpDispatcher->HadDecodeFailure()) {
             if (Config.BreakOnFrontendFailure) {
@@ -850,6 +850,10 @@ namespace FEXCore::Context {
           auto hash = fasthash64((void*)(AOTEntry->second.start + file->second.Start  - file->second.Offset), AOTEntry->second.len, 0);
           if (hash == AOTEntry->second.crc) {
             IRList = AOTEntry->second.IR;
+            //LogMan::Msg::D("using %s + %lx -> %lx\n", file->second.fileid.c_str(), AOTEntry->first, GuestRIP);
+            // relocate
+            IRList->GetHeader()->Entry = GuestRIP;
+
             RAData = AOTEntry->second.RAData;
             DebugData = new FEXCore::Core::DebugData();
 

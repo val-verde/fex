@@ -476,6 +476,7 @@ public:
 private:
   bool DecodeFailure{false};
   FEXCore::IR::IROp_IRHeader *Current_Header{};
+  OrderedNode *Current_HeaderNode{};
 
   OrderedNode *AppendSegmentOffset(OrderedNode *Value, uint32_t Flags, uint32_t DefaultPrefix = 0, bool Override = false);
 

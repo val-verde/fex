@@ -208,7 +208,7 @@ namespace FEXCore::Context {
     void ExecutionThread(FEXCore::Core::InternalThreadState *Thread);
     void NotifyPause();
 
-    void AddBlockMapping(FEXCore::Core::InternalThreadState *Thread, uint64_t Address, void *Ptr, uint64_t Begin, uint64_t End);
+    void AddBlockMapping(FEXCore::Core::InternalThreadState *Thread, uint64_t Address, std::vector<std::tuple<uint64_t, void*>> &Entrypoints, uint64_t Begin, uint64_t End);
 
     FEXCore::CodeLoader *LocalLoader{};
 

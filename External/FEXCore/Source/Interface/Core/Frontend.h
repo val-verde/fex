@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <utility>
 #include <set>
+#include <map>
 #include <stack>
 #include <vector>
 
@@ -22,12 +23,14 @@ public:
     FEXCore::X86Tables::DecodedInst *DecodedInstructions;
     bool HasInvalidInstruction{};
     bool IsEntrypoint;
+    bool IsInvalid{};
+    uint64_t ImplicitJump;
   };
 
   Decoder(FEXCore::Context::Context *ctx);
   bool DecodeInstructionsAtEntry(uint8_t const* InstStream, uint64_t PC);
 
-  std::vector<DecodedBlocks> const *GetDecodedBlocks() {
+  std::vector<DecodedBlocks> *GetDecodedBlocks() {
     return &Blocks;
   }
 
@@ -70,7 +73,7 @@ private:
   std::vector<DecodedBlocks> Blocks;
   std::set<uint64_t> BlocksToDecode;
   std::set<uint64_t> Entrypoints;
-  std::set<uint64_t> HasBlocks;
+  std::map<uint64_t, uint64_t> HasBlocks;
 
   // ModRM rm decoding
   using DecodeModRMPtr = void (FEXCore::Frontend::Decoder::*)(X86Tables::DecodedOperand *Operand, X86Tables::ModRMDecoded ModRM);

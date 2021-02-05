@@ -38,6 +38,7 @@ public:
     LogMan::Throw::A(InsertPoint.second == true, "Dupplicate block mapping added");
 
     // no need to update L1 or L2, they will get updated on first lookup
+    CacheBlockMapping(Address, (uintptr_t)HostCode);
   }
 
   void Erase(uint64_t Address) {
@@ -97,9 +98,8 @@ private:
   void CacheBlockMapping(uint64_t Address, uintptr_t HostCode) { 
     // Do L1
     auto &L1Entry = reinterpret_cast<LookupCacheEntry*>(L1Pointer)[Address & L1_ENTRIES_MASK];
-    if (L1Entry.GuestCode == Address) {
-      L1Entry.GuestCode = L1Entry.HostCode = 0;
-    }
+    L1Entry.GuestCode = Address;
+    L1Entry.HostCode = HostCode;
 
     // Do ful map
     auto FullAddress = Address;

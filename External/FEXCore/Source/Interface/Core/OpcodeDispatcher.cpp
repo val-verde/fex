@@ -4403,6 +4403,10 @@ void OpDispatchBuilder::CMPXCHGPairOp(OpcodeArgs) {
 void OpDispatchBuilder::CreateJumpBlocks(std::vector<FEXCore::Frontend::Decoder::DecodedBlocks> const *Blocks) {
   OrderedNode *PrevCodeBlock{};
   for (auto &Target : *Blocks) {
+    if (Target.IsInvalid) {
+      continue;
+    }
+
     auto CodeNode = CreateCodeNode();
 
     JumpTargets.try_emplace(Target.Entry, JumpTargetInfo{CodeNode, false});

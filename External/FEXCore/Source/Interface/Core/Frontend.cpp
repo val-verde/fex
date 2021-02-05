@@ -1057,15 +1057,24 @@ bool Decoder::DecodeInstructionsAtEntry(uint8_t const* _InstStream, uint64_t PC)
       }
 
       if (!CanContinue) {
+        CurrentBlockDecoding.ImplicitJump = RIPToDecode + PCOffset + DecodeInst->InstSize;
+        break;
+      }
+
+      if (HasBlocks.contains(RIPToDecode + PCOffset + DecodeInst->InstSize) ||
+        BlocksToDecode.contains(RIPToDecode + PCOffset + DecodeInst->InstSize)) {
+        CurrentBlockDecoding.ImplicitJump = RIPToDecode + PCOffset + DecodeInst->InstSize;
         break;
       }
 
       if (DecodedSize >= CTX->Config.MaxInstPerBlock ||
           DecodedSize >= DecodedBuffer.size()) {
+          CurrentBlockDecoding.ImplicitJump = RIPToDecode + PCOffset + DecodeInst->InstSize;
         break;
       }
 
       if (TotalInstructions >= CTX->Config.MaxInstPerBlock) {
+        CurrentBlockDecoding.ImplicitJump = RIPToDecode + PCOffset + DecodeInst->InstSize;
         break;
       }
 
@@ -1074,7 +1083,19 @@ bool Decoder::DecodeInstructionsAtEntry(uint8_t const* _InstStream, uint64_t PC)
     }
 
     BlocksToDecode.erase(BlockDecodeIt);
-    HasBlocks.emplace(RIPToDecode);
+
+    auto BlockLength = PCOffset + DecodeInst->InstSize;
+
+    auto it = HasBlocks.lower_bound(RIPToDecode);
+    if (it != HasBlocks.begin()) {
+      --it;
+      if ((it->first + it->second) > RIPToDecode) {
+        std::find_if(Blocks.begin(), Blocks.end(), [&it](const DecodedBlocks& b) { return !b.IsInvalid && b.Entry == it->first; })->IsInvalid = true;
+        HasBlocks.erase(it->first);
+        BlocksToDecode.emplace(it->first);
+      }
+    }
+    HasBlocks.emplace(RIPToDecode, PCOffset + DecodeInst->InstSize);
 
     // Copy over only the number of instructions we decoded
     CurrentBlockDecoding.NumInstructions = BlockNumberOfInstructions;

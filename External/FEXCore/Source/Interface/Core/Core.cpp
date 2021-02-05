@@ -600,7 +600,7 @@ namespace FEXCore::Context {
     return Thread;
   }
     
-  void Context::AddBlockMapping(FEXCore::Core::InternalThreadState *Thread, uint64_t Address, void *Ptr, uint64_t Begin, uint64_t End) {
+  void Context::AddBlockMapping(FEXCore::Core::InternalThreadState *Thread, uint64_t Address, std::vector<std::tuple<uint64_t, void*>> &Entrypoints, uint64_t Begin, uint64_t End) {
     {
       std::lock_guard<std::mutex> lk(CodePagesLock);
       for (auto CurrentPage = Begin >> 12, EndPage = End >> 12; CurrentPage <= EndPage; CurrentPage++) {
@@ -608,7 +608,16 @@ namespace FEXCore::Context {
       }
     }
 
-    Thread->LookupCache->AddBlockMapping(Address, Ptr);
+    for (const auto& [EntryGuest, EntryHost]: Entrypoints) {
+      
+     if (Thread->LookupCache->FindBlock(Address + EntryGuest)) {
+        LogMan::Throw::A(EntryGuest != 0, "Dupplicate entrypoint?");
+
+        continue;
+      } 
+      // Insert to lookup cache
+      Thread->LookupCache->AddBlockMapping(Address + EntryGuest, EntryHost);
+    }
   }
 
   void Context::ClearCodeCache(FEXCore::Core::InternalThreadState *Thread, bool AlsoClearIRCache) {
@@ -644,10 +653,19 @@ namespace FEXCore::Context {
 
     auto CodeBlocks = Thread->FrontendDecoder->GetDecodedBlocks();
 
+    for (auto &Block : *CodeBlocks) {
+      if (Thread->LookupCache->FindBlock(Block.Entry)) {
+        Block.IsInvalid = true;
+      }
+    }
+
     Thread->OpDispatcher->BeginFunction(GuestRIP, CodeBlocks);
 
     for (size_t j = 0; j < CodeBlocks->size(); ++j) {
       FEXCore::Frontend::Decoder::DecodedBlocks const &Block = CodeBlocks->at(j);
+      if (Block.IsInvalid) {
+        continue;
+      }
       // Set the block entry point
       Thread->OpDispatcher->SetNewBlockIfChanged(Block.Entry);
 
@@ -910,6 +928,8 @@ namespace FEXCore::Context {
       GeneratedIR = true;
     }
 
+    DebugData->Entrypoints.clear();
+
     // Attempt to get the CPU backend to compile this code
     return { Thread->CPUBackend->CompileCode(IRList, DebugData, RAData), IRList, DebugData, RAData, GeneratedIR, MinAddr, MaxAddr};
   }
@@ -1129,16 +1149,7 @@ namespace FEXCore::Context {
     if (DecrementRefCount)
       --Thread->CompileBlockReentrantRefCount;
 
-    for (const auto& [EntryGuest, EntryHost]: DebugData->Entrypoints) {
-      if (Thread->LookupCache->FindBlock(GuestRIP + EntryGuest)) {
-        LogMan::Throw::A(EntryGuest != 0, "Dupplicate entrypoint?");
-
-        continue;
-      }
-      
-      // Insert to lookup cache
-      AddBlockMapping(Thread, GuestRIP + EntryGuest, EntryHost, MinAddress, MaxAddress);
-    }
+    AddBlockMapping(Thread, GuestRIP, DebugData->Entrypoints, MinAddress, MaxAddress);
 
     return (uintptr_t)CodePtr;
   }
@@ -1206,10 +1217,15 @@ namespace FEXCore::Context {
   }
 
   void Context::RemoveCodeEntry(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP) {
+    auto &Entrypoints = Thread->DebugData[GuestRIP]->Entrypoints;
+
+    for (const auto& [EntryGuest, EntryHost]: Entrypoints) {
+      Thread->LookupCache->Erase(GuestRIP + EntryGuest);
+    }
+
     Thread->IRLists.erase(GuestRIP);
     Thread->RALists.erase(GuestRIP);
     Thread->DebugData.erase(GuestRIP);
-    Thread->LookupCache->Erase(GuestRIP);
   }
 
   // Debug interface

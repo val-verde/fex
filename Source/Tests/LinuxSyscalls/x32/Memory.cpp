@@ -27,7 +27,7 @@ namespace FEX::HLE::x32 {
     });
 
     REGISTER_SYSCALL_IMPL_X32(mprotect, [](FEXCore::Core::InternalThreadState *Thread, void *addr, uint32_t len, int prot) -> uint64_t {
-      uint64_t Result = ::mprotect(addr, len, prot);
+      uint64_t Result = ::mprotect(addr, len, prot & ~PROT_GROWSDOWN);
       SYSCALL_ERRNO();
     });
 

@@ -433,6 +433,8 @@ bool JITCore::HandleSIGILL(int Signal, void *info, void *ucontext) {
   ucontext_t* _context = (ucontext_t*)ucontext;
   mcontext_t* _mcontext = &_context->uc_mcontext;
 
+  fprintf(stderr, "handle guest\n");
+
   if (_mcontext->pc == ThreadSharedData.SignalReturnInstruction) {
     RestoreThreadState(ucontext);
 

@@ -13,6 +13,8 @@
 
 ARG_TO_STR(FEX::HLE::x32::compat_ptr<FEX::HLE::x32::timespec32>, "%lx")
 
+#define GET_PATH(pathname) (pathname ? FEX::HLE::_SyscallHandler->FM.GetEmulatedPath(pathname).c_str() : nullptr)
+
 namespace FEX::HLE::x32 {
   void RegisterTime() {
     REGISTER_SYSCALL_IMPL_X32(gettimeofday, [](FEXCore::Core::InternalThreadState *Thread, timeval32 *tv, struct timezone *tz) -> uint64_t {
@@ -94,7 +96,7 @@ namespace FEX::HLE::x32 {
       times64[0] = times[0];
       times64[1] = times[1];
 
-      uint64_t Result = ::syscall(SYS_utimensat, dirfd, pathname, times64, flags);
+      uint64_t Result = ::syscall(SYS_utimensat, dirfd, GET_PATH(pathname), times64, flags);
       SYSCALL_ERRNO();
     });
 
@@ -124,7 +126,7 @@ namespace FEX::HLE::x32 {
     });
 
     REGISTER_SYSCALL_IMPL_X32(utimensat_time64, [](FEXCore::Core::InternalThreadState *Thread, int dirfd, const char *pathname, const struct timespec times[2], int flags) -> uint64_t {
-      uint64_t Result = ::utimensat(dirfd, pathname, times, flags);
+      uint64_t Result = ::utimensat(dirfd, GET_PATH(pathname), times, flags);
       SYSCALL_ERRNO();
     });
   }

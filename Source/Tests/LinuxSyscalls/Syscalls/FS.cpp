@@ -14,15 +14,25 @@
 #include <fcntl.h>
 #include <sys/xattr.h>
 
+#define GET_PATH(pathname) (pathname ? FEX::HLE::_SyscallHandler->FM.GetEmulatedPath(pathname).c_str() : nullptr)
+
+
 namespace FEX::HLE {
   void RegisterFS() {
     REGISTER_SYSCALL_IMPL(getcwd, [](FEXCore::Core::InternalThreadState *Thread, char *buf, size_t size) -> uint64_t {
       uint64_t Result = syscall(SYS_getcwd, buf, size);
+      if (Result != -1) {
+        auto rootpath = FEX::HLE::_SyscallHandler->FM.GetEmulatedPath("/");
+        for (int i = rootpath.size() - 1, j = 0; buf[i]; i++, j++) {
+          buf[j] = buf[i];
+          buf[j+1] = 0;
+        }
+      }
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(chdir, [](FEXCore::Core::InternalThreadState *Thread, const char *path) -> uint64_t {
-      uint64_t Result = ::chdir(path);
+      uint64_t Result = ::chdir(GET_PATH(path));
       SYSCALL_ERRNO();
     });
 
@@ -32,32 +42,32 @@ namespace FEX::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(rename, [](FEXCore::Core::InternalThreadState *Thread, const char *oldpath, const char *newpath) -> uint64_t {
-      uint64_t Result = ::rename(oldpath, newpath);
+      uint64_t Result = ::rename(GET_PATH(oldpath), GET_PATH(newpath));
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(mkdir, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname, mode_t mode) -> uint64_t {
-      uint64_t Result = ::mkdir(pathname, mode);
+      uint64_t Result = ::mkdir(GET_PATH(pathname), mode);
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(rmdir, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname) -> uint64_t {
-      uint64_t Result = ::rmdir(pathname);
+      uint64_t Result = ::rmdir(GET_PATH(pathname));
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(link, [](FEXCore::Core::InternalThreadState *Thread, const char *oldpath, const char *newpath) -> uint64_t {
-      uint64_t Result = ::link(oldpath, newpath);
+      uint64_t Result = ::link(GET_PATH(oldpath), GET_PATH(newpath));
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(unlink, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname) -> uint64_t {
-      uint64_t Result = ::unlink(pathname);
+      uint64_t Result = ::unlink(GET_PATH(pathname));
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(symlink, [](FEXCore::Core::InternalThreadState *Thread, const char *target, const char *linkpath) -> uint64_t {
-      uint64_t Result = ::symlink(target, linkpath);
+      uint64_t Result = ::symlink(GET_PATH(target), GET_PATH(linkpath));
       SYSCALL_ERRNO();
     });
 
@@ -67,7 +77,7 @@ namespace FEX::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(chmod, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname, mode_t mode) -> uint64_t {
-      uint64_t Result = ::chmod(pathname, mode);
+      uint64_t Result = ::chmod(GET_PATH(pathname), mode);
       SYSCALL_ERRNO();
     });
 
@@ -114,18 +124,18 @@ namespace FEX::HLE {
       SYSCALL_ERRNO();
     });
 
-    /*REGISTER_SYSCALL_IMPL(truncate, [](FEXCore::Core::InternalThreadState *Thread, const char *path, off_t length) -> uint64_t {
-      SYSCALL_STUB(truncate);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(truncate);
+    REGISTER_SYSCALL_IMPL(truncate, [](FEXCore::Core::InternalThreadState *Thread, const char *path, off_t length) -> uint64_t {
+      uint64_t Result = ::truncate(GET_PATH(path), length);
+      SYSCALL_ERRNO();
+    });
 
-    /*REGISTER_SYSCALL_IMPL(creat, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname, mode_t mode) -> uint64_t {
-      SYSCALL_STUB(creat);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(creat);
+    REGISTER_SYSCALL_IMPL(creat, [](FEXCore::Core::InternalThreadState *Thread, const char *pathname, mode_t mode) -> uint64_t {
+      uint64_t Result = ::creat(GET_PATH(pathname), mode);
+      SYSCALL_ERRNO();
+    });
 
     REGISTER_SYSCALL_IMPL(chroot, [](FEXCore::Core::InternalThreadState *Thread, const char *path) -> uint64_t {
-      uint64_t Result = ::chroot(path);
+      uint64_t Result = ::chroot(GET_PATH(path));
       SYSCALL_ERRNO();
     });
 
@@ -135,27 +145,27 @@ namespace FEX::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(acct, [](FEXCore::Core::InternalThreadState *Thread, const char *filename) -> uint64_t {
-      uint64_t Result = ::acct(filename);
+      uint64_t Result = ::acct(GET_PATH(filename));
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(mount, [](FEXCore::Core::InternalThreadState *Thread, const char *source, const char *target, const char *filesystemtype, unsigned long mountflags, const void *data) -> uint64_t {
-      uint64_t Result = ::mount(source, target, filesystemtype, mountflags, data);
+      uint64_t Result = ::mount(GET_PATH(source), GET_PATH(target), filesystemtype, mountflags, data);
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(umount2, [](FEXCore::Core::InternalThreadState *Thread, const char *target, int flags) -> uint64_t {
-      uint64_t Result = ::umount2(target, flags);
+      uint64_t Result = ::umount2(GET_PATH(target), flags);
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(swapon, [](FEXCore::Core::InternalThreadState *Thread, const char *path, int swapflags) -> uint64_t {
-      uint64_t Result = ::swapon(path, swapflags);
+      uint64_t Result = ::swapon(GET_PATH(path), swapflags);
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(swapoff, [](FEXCore::Core::InternalThreadState *Thread, const char *path) -> uint64_t {
-      uint64_t Result = ::swapoff(path);
+      uint64_t Result = ::swapoff(GET_PATH(path));
       SYSCALL_ERRNO();
     });
 
@@ -166,53 +176,45 @@ namespace FEX::HLE {
     });*/
     REGISTER_SYSCALL_FORWARD_ERRNO(syncfs);
 
-    /*
     REGISTER_SYSCALL_IMPL(setxattr, [](FEXCore::Core::InternalThreadState *Thread, const char *path, const char *name, const void *value, size_t size, int flags) -> uint64_t {
-      SYSCALL_STUB(setxattr);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(setxattr);
+      uint64_t Result = ::setxattr(GET_PATH(path), name, value, size, flags);
+      SYSCALL_ERRNO();
+    });
 
-    /*
     REGISTER_SYSCALL_IMPL(lsetxattr, [](FEXCore::Core::InternalThreadState *Thread, const char *path, const char *name, const void *value, size_t size, int flags) -> uint64_t {
-      SYSCALL_STUB(lsetxattr);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(lsetxattr);
+      uint64_t Result = ::lsetxattr(GET_PATH(path), name, value, size, flags);
+      SYSCALL_ERRNO();
+    });
 
-    /*
     REGISTER_SYSCALL_IMPL(fsetxattr, [](FEXCore::Core::InternalThreadState *Thread, int fd, const char *name, const void *value, size_t size, int flags) -> uint64_t {
-      SYSCALL_STUB(fsetxattr);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(fsetxattr);
+      uint64_t Result = ::fsetxattr(fd, name, value, size, flags);
+      SYSCALL_ERRNO();
+    });
 
-    /*
     REGISTER_SYSCALL_IMPL(getxattr, [](FEXCore::Core::InternalThreadState *Thread, const char *path, const char *name, void *value, size_t size) -> uint64_t {
-      SYSCALL_STUB(getxattr);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(getxattr);
+      uint64_t Result = ::getxattr(GET_PATH(path), name, value, size);
+      SYSCALL_ERRNO();
+    });
 
-    /*
     REGISTER_SYSCALL_IMPL(lgetxattr, [](FEXCore::Core::InternalThreadState *Thread, const char *path, const char *name, void *value, size_t size) -> uint64_t {
-      SYSCALL_STUB(lgetxattr);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(lgetxattr);
+      uint64_t Result = ::lgetxattr(GET_PATH(path), name, value, size);
+      SYSCALL_ERRNO();
+    });
 
-    /*
     REGISTER_SYSCALL_IMPL(fgetxattr, [](FEXCore::Core::InternalThreadState *Thread, int fd, const char *name, void *value, size_t size) -> uint64_t {
-      SYSCALL_STUB(fgetxattr);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(fgetxattr);
+      uint64_t Result = ::fgetxattr(fd, name, value, size);
+      SYSCALL_ERRNO();
+    });
 
-    /*
     REGISTER_SYSCALL_IMPL(listxattr, [](FEXCore::Core::InternalThreadState *Thread, const char *path, char *list, size_t size) -> uint64_t {
-      SYSCALL_STUB(listxattr);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(listxattr);
+      uint64_t Result = ::listxattr(GET_PATH(path), list, size);
+      SYSCALL_ERRNO();
+    });
 
-    /*
     REGISTER_SYSCALL_IMPL(llistxattr, [](FEXCore::Core::InternalThreadState *Thread, const char *path, char *list, size_t size) -> uint64_t {
-      SYSCALL_STUB(llistxattr);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(llistxattr);
+      uint64_t Result = ::llistxattr(GET_PATH(path), list, size);
+      SYSCALL_ERRNO();
+    });
 
     /*
     REGISTER_SYSCALL_IMPL(flistxattr, [](FEXCore::Core::InternalThreadState *Thread, int fd, char *list, size_t size) -> uint64_t {
@@ -220,17 +222,15 @@ namespace FEX::HLE {
     });*/
     REGISTER_SYSCALL_FORWARD_ERRNO(flistxattr);
 
-    /*
     REGISTER_SYSCALL_IMPL(removexattr, [](FEXCore::Core::InternalThreadState *Thread, const char *path, const char *name) -> uint64_t {
-      SYSCALL_STUB(removexattr);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(removexattr);
+      uint64_t Result = ::removexattr(GET_PATH(path), name);
+      SYSCALL_ERRNO();
+    });
 
-    /*
     REGISTER_SYSCALL_IMPL(lremovexattr, [](FEXCore::Core::InternalThreadState *Thread, const char *path, const char *name) -> uint64_t {
-      SYSCALL_STUB(lremovexattr);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(lremovexattr);
+      uint64_t Result = ::lremovexattr(GET_PATH(path), name);
+      SYSCALL_ERRNO();
+    });
 
     /*
     REGISTER_SYSCALL_IMPL(fremovexattr, [](FEXCore::Core::InternalThreadState *Thread, int fd, const char *name) -> uint64_t {
@@ -244,7 +244,7 @@ namespace FEX::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(fanotify_mark, [](FEXCore::Core::InternalThreadState *Thread, int fanotify_fd, unsigned int flags, uint64_t mask, int dirfd, const char *pathname) -> uint64_t {
-      uint64_t Result = ::fanotify_mark(fanotify_fd, flags, mask, dirfd, pathname);
+      uint64_t Result = ::fanotify_mark(fanotify_fd, flags, mask, dirfd, GET_PATH(pathname));
       SYSCALL_ERRNO();
     });
   }

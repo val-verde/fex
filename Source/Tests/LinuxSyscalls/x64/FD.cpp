@@ -9,6 +9,8 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#define GET_PATH(pathname) (pathname ? FEX::HLE::_SyscallHandler->FM.GetEmulatedPath(pathname).c_str() : nullptr)
+
 namespace FEX::HLE::x64 {
   struct __attribute__((packed)) guest_stat {
     __kernel_ulong_t  st_dev;
@@ -76,12 +78,12 @@ namespace FEX::HLE::x64 {
     });
 
     REGISTER_SYSCALL_IMPL_X64(futimesat, [](FEXCore::Core::CpuStateFrame *Frame, int dirfd, const char *pathname, const struct timeval times[2]) -> uint64_t {
-      uint64_t Result = ::futimesat(dirfd, pathname, times);
+      uint64_t Result = ::futimesat(dirfd, GET_PATH(pathname), times);
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL_X64(utimensat, [](FEXCore::Core::CpuStateFrame *Frame, int dirfd, const char *pathname, const struct timespec times[2], int flags) -> uint64_t {
-      uint64_t Result = ::syscall(SYS_utimensat, dirfd, pathname, times, flags);
+      uint64_t Result = ::syscall(SYS_utimensat, dirfd, GET_PATH(pathname), times, flags);
       SYSCALL_ERRNO();
     });
 

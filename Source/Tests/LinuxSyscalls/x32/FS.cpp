@@ -4,10 +4,12 @@
 #include <sys/mount.h>
 #include <unistd.h>
 
+#define GET_PATH(pathname) (pathname ? FEX::HLE::_SyscallHandler->FM.GetEmulatedPath(pathname).c_str() : nullptr)
+
 namespace FEX::HLE::x32 {
   void RegisterFS() {
     REGISTER_SYSCALL_IMPL_X32(umount, [](FEXCore::Core::CpuStateFrame *Frame, const char *target) -> uint64_t {
-      uint64_t Result = ::umount(target);
+      uint64_t Result = ::umount(GET_PATH(target));
       SYSCALL_ERRNO();
     });
 

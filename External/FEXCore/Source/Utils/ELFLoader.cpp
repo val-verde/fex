@@ -6,6 +6,8 @@
 #include <fstream>
 #include <stdint.h>
 #include <vector>
+#include <unistd.h>
+#include <filesystem>
 
 namespace ELFLoader {
 bool ELFContainer::IsSupportedELF(std::string const &Filename) {
@@ -66,9 +68,35 @@ bool ELFContainer::IsSupportedELF(std::string const &Filename) {
   return false;
 }
 
+static std::string resolve_softlink(const std::string& RootFS, const std::string& FilePath )
+{
+    std::vector<char> buf(400);
+    ssize_t len;
+
+    std::string Absolute = RootFS + FilePath;
+
+    do
+    {
+        buf.resize(buf.size() + 100);
+        len = ::readlink(Absolute.c_str(), &(buf[0]), buf.size());
+    } while (buf.size() == len);
+
+    if (len > 0)
+    {
+        buf[len] = '\0';
+        if (buf[0] == '/')
+          return resolve_softlink(RootFS, &buf.at(0));
+        else
+          resolve_softlink(RootFS, std::filesystem::path(Absolute).parent_path().string() + &buf.at(0));
+    }
+    /* handle error */
+    return Absolute;
+}
+
+
 ELFContainer::ELFContainer(std::string const &Filename, std::string const &RootFS, bool CustomInterpreter) {
   Loaded = true;
-  if (!LoadELF(Filename)) {
+  if (!LoadELF(resolve_softlink(RootFS, Filename))) {
     LogMan::Msg::E("Couldn't Load ELF file");
     Loaded = false;
     return;
@@ -85,7 +113,7 @@ ELFContainer::ELFContainer(std::string const &Filename, std::string const &RootF
     else {
       RawString = &RawFile.at(InterpreterHeader._64->p_offset);
     }
-    if (!RootFS.empty() && LoadELF(RootFS + RawString)) {
+    if (!RootFS.empty() && LoadELF(resolve_softlink(RootFS, RawString))) {
       // Found the interpreter in the rootfs
     }
     else if (!LoadELF(RawString)) {

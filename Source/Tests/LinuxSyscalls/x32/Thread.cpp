@@ -273,11 +273,12 @@ namespace FEX::HLE::x32 {
       // Check the rootfs if it is available first
       if (pathname[0] == '/') {
         Filename = FEX::HLE::_SyscallHandler->RootFSPath() + pathname;
-
+        // always looks in the rootfs now
+/*
         bool exists = std::filesystem::exists(Filename, ec);
         if (ec || !exists) {
           Filename = pathname;
-        }
+        }*/
       }
       else {
         Filename = pathname;

@@ -44,6 +44,7 @@ public:
   uint64_t Statfs(const char *path, void *buf);
 
   std::string *FindFDName(int fd);
+  std::string GetEmulatedPath(const char *pathname);
 
 private:
   FEX::EmulatedFile::EmulatedFDManager EmuFD;
@@ -51,7 +52,6 @@ private:
   std::mutex FDLock;
   std::unordered_map<int32_t, std::string> FDToNameMap;
   std::string PidSelfPath;
-  std::string GetEmulatedPath(const char *pathname);
   std::map<std::string, std::string> ThunkOverlays;
 
   FEX_CONFIG_OPT(Filename, APP_FILENAME);

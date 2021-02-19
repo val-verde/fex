@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <utime.h>
 
+#define GET_PATH(pathname) (pathname ? FEX::HLE::_SyscallHandler->FM.GetEmulatedPath(pathname).c_str() : nullptr)
+
 namespace FEX::HLE::x64 {
   void RegisterTime() {
     REGISTER_SYSCALL_IMPL_X64(gettimeofday, [](FEXCore::Core::CpuStateFrame *Frame, struct timeval *tv, struct timezone *tz) -> uint64_t {
@@ -48,7 +50,7 @@ namespace FEX::HLE::x64 {
     });
 
     REGISTER_SYSCALL_IMPL_X64(utimes, [](FEXCore::Core::CpuStateFrame *Frame, const char *filename, const struct timeval times[2]) -> uint64_t {
-      uint64_t Result = ::utimes(filename, times);
+      uint64_t Result = ::utimes(GET_PATH(filename), times);
       SYSCALL_ERRNO();
     });
   }

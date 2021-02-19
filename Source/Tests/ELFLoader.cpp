@@ -125,9 +125,12 @@ void InterpreterHandler(std::string *Filename, std::string const &RootFS, std::v
 
     // If the filename is absolute then prepend the rootfs
     // If it is relative then don't append the rootfs
+    /*
+    // always looks in the rootfs now
     if (ShebangProgram[0] == '/') {
       ShebangProgram = RootFS + ShebangProgram;
     }
+    */
     *Filename = ShebangProgram;
 
     // Insert all the arguments at the start
@@ -214,9 +217,14 @@ int main(int argc, char **argv, char **const envp) {
     }
   }
 
+  auto RootFS = LDPath();
+  if (Args[0].substr(0, RootFS.size()) == RootFS) {
+    Args[0] = Args[0].substr(RootFS.size());
+  }
+
   InterpreterHandler(&Program, LDPath(), &Args);
 
-  if (!std::filesystem::exists(Program)) {
+  if (!std::filesystem::exists(LDPath() + Program)) {
     // Early exit if the program passed in doesn't exist
     // Will prevent a crash later
     LogMan::Msg::E("%s: command not found", Program.c_str());

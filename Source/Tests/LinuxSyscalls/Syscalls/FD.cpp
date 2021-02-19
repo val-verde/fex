@@ -17,6 +17,8 @@
 #include <sys/eventfd.h>
 #include <sys/syscall.h>
 
+#define GET_PATH(pathname) (pathname ? FEX::HLE::_SyscallHandler->FM.GetEmulatedPath(pathname).c_str() : nullptr)
+
 namespace FEX::HLE {
   static int RemapFlags(int flags) {
 #ifdef _M_X86_64
@@ -58,11 +60,10 @@ namespace FEX::HLE {
       SYSCALL_ERRNO();
     });
 
-    /*
     REGISTER_SYSCALL_IMPL(chown, [](FEXCore::Core::CpuStateFrame *Frame, const char *pathname, uid_t owner, gid_t group) -> uint64_t {
-      SYSCALL_STUB(chown);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(chown);
+      uint64_t Result = chown(GET_PATH(pathname), owner, group);
+      SYSCALL_ERRNO();
+    });
 
     /*
     REGISTER_SYSCALL_IMPL(fchown, [](FEXCore::Core::CpuStateFrame *Frame, int fd, uid_t owner, gid_t group) -> uint64_t {
@@ -70,11 +71,10 @@ namespace FEX::HLE {
     });*/
     REGISTER_SYSCALL_FORWARD_ERRNO(fchown);
 
-    /*
     REGISTER_SYSCALL_IMPL(lchown, [](FEXCore::Core::CpuStateFrame *Frame, const char *pathname, uid_t owner, gid_t group) -> uint64_t {
-      SYSCALL_STUB(lchown);
-    });*/
-    REGISTER_SYSCALL_FORWARD_ERRNO(lchown);
+      uint64_t Result = lchown(GET_PATH(pathname), owner, group);
+      SYSCALL_ERRNO();
+    });
 
     REGISTER_SYSCALL_IMPL(lseek, [](FEXCore::Core::CpuStateFrame *Frame, int fd, uint64_t offset, int whence) -> uint64_t {
       uint64_t Result = ::lseek(fd, offset, whence);
@@ -163,7 +163,7 @@ namespace FEX::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(inotify_add_watch, [](FEXCore::Core::CpuStateFrame *Frame, int fd, const char *pathname, uint32_t mask) -> uint64_t {
-      uint64_t Result = ::inotify_add_watch(fd, pathname, mask);
+      uint64_t Result = ::inotify_add_watch(fd, GET_PATH(pathname), mask);
       SYSCALL_ERRNO();
     });
 
@@ -179,37 +179,37 @@ namespace FEX::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(mkdirat, [](FEXCore::Core::CpuStateFrame *Frame, int dirfd, const char *pathname, mode_t mode) -> uint64_t {
-      uint64_t Result = ::mkdirat(dirfd, pathname, mode);
+      uint64_t Result = ::mkdirat(dirfd, GET_PATH(pathname), mode);
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(mknodat, [](FEXCore::Core::CpuStateFrame *Frame, int dirfd, const char *pathname, mode_t mode, dev_t dev) -> uint64_t {
-      uint64_t Result = ::mknodat(dirfd, pathname, mode, dev);
+      uint64_t Result = ::mknodat(dirfd, GET_PATH(pathname), mode, dev);
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(fchownat, [](FEXCore::Core::CpuStateFrame *Frame, int dirfd, const char *pathname, uid_t owner, gid_t group, int flags) -> uint64_t {
-      uint64_t Result = ::fchownat(dirfd, pathname, owner, group, flags);
+      uint64_t Result = ::fchownat(dirfd, GET_PATH(pathname), owner, group, flags);
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(unlinkat, [](FEXCore::Core::CpuStateFrame *Frame, int dirfd, const char *pathname, int flags) -> uint64_t {
-      uint64_t Result = ::unlinkat(dirfd, pathname, flags);
+      uint64_t Result = ::unlinkat(dirfd, GET_PATH(pathname), flags);
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(renameat, [](FEXCore::Core::CpuStateFrame *Frame, int olddirfd, const char *oldpath, int newdirfd, const char *newpath) -> uint64_t {
-      uint64_t Result = ::renameat(olddirfd, oldpath, newdirfd, newpath);
+      uint64_t Result = ::renameat(olddirfd, GET_PATH(oldpath), newdirfd, GET_PATH(newpath));
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(linkat, [](FEXCore::Core::CpuStateFrame *Frame, int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags) -> uint64_t {
-      uint64_t Result = ::linkat(olddirfd, oldpath, newdirfd, newpath, flags);
+      uint64_t Result = ::linkat(olddirfd, GET_PATH(oldpath), newdirfd, GET_PATH(newpath), flags);
       SYSCALL_ERRNO();
     });
 
     REGISTER_SYSCALL_IMPL(symlinkat, [](FEXCore::Core::CpuStateFrame *Frame, const char *target, int newdirfd, const char *linkpath) -> uint64_t {
-      uint64_t Result = ::symlinkat(target, newdirfd, linkpath);
+      uint64_t Result = ::symlinkat(GET_PATH(target), newdirfd, GET_PATH(linkpath));
       SYSCALL_ERRNO();
     });
 
@@ -219,7 +219,7 @@ namespace FEX::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(fchmodat, [](FEXCore::Core::CpuStateFrame *Frame, int dirfd, const char *pathname, mode_t mode) -> uint64_t {
-      uint64_t Result = syscall(SYS_fchmodat, dirfd, pathname, mode);
+      uint64_t Result = syscall(SYS_fchmodat, dirfd, GET_PATH(pathname), mode);
       SYSCALL_ERRNO();
     });
 
@@ -287,7 +287,7 @@ namespace FEX::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(renameat2, [](FEXCore::Core::CpuStateFrame *Frame, int olddirfd, const char *oldpath, int newdirfd, const char *newpath, unsigned int flags) -> uint64_t {
-      uint64_t Result = ::renameat2(olddirfd, oldpath, newdirfd, newpath, flags);
+      uint64_t Result = ::renameat2(olddirfd, GET_PATH(oldpath), newdirfd, GET_PATH(newpath), flags);
       SYSCALL_ERRNO();
     });
 
@@ -303,7 +303,7 @@ namespace FEX::HLE {
 
     REGISTER_SYSCALL_IMPL(name_to_handle_at, [](FEXCore::Core::CpuStateFrame *Frame, int dirfd, const char *pathname, struct file_handle *handle, int *mount_id, int flags) -> uint64_t {
       flags = RemapFlags(flags);
-      uint64_t Result = ::name_to_handle_at(dirfd, pathname, handle, mount_id, flags);
+      uint64_t Result = ::name_to_handle_at(dirfd, GET_PATH(pathname), handle, mount_id, flags);
       SYSCALL_ERRNO();
     });
 

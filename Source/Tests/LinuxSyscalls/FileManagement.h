@@ -41,13 +41,13 @@ public:
   uint64_t Statfs(const char *path, void *buf);
 
   std::string *FindFDName(int fd);
+  std::string GetEmulatedPath(const char *pathname);
 
 private:
   FEX::EmulatedFile::EmulatedFDManager EmuFD;
 
   std::unordered_map<int32_t, std::string> FDToNameMap;
   std::string PidSelfPath;
-  std::string GetEmulatedPath(const char *pathname);
 
   FEXCore::Config::Value<std::string> Filename{FEXCore::Config::CONFIG_APP_FILENAME, ""};
   FEXCore::Config::Value<std::string> LDPath{FEXCore::Config::CONFIG_ROOTFSPATH, ""};

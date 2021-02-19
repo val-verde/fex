@@ -11,6 +11,9 @@
 #include <unistd.h>
 #include <utime.h>
 
+#define GET_PATH(pathname) (pathname ? FEX::HLE::_SyscallHandler->FM.GetEmulatedPath(pathname).c_str() : nullptr)
+
+
 namespace FEX::HLE {
   void RegisterTime() {
     REGISTER_SYSCALL_IMPL(pause, [](FEXCore::Core::InternalThreadState *Thread) -> uint64_t {
@@ -29,7 +32,7 @@ namespace FEX::HLE {
     });
 
     REGISTER_SYSCALL_IMPL(utime, [](FEXCore::Core::InternalThreadState *Thread, char* filename, const struct utimbuf* times) -> uint64_t {
-      uint64_t Result = ::utime(filename, times);
+      uint64_t Result = ::utime(GET_PATH(filename), times);
       SYSCALL_ERRNO();
     });
 

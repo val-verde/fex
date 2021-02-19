@@ -442,7 +442,7 @@ void DispatchGenerator::RestoreThreadState(void *ucontext) {
 bool DispatchGenerator::HandleGuestSignal(int Signal, void *info, void *ucontext, GuestSigAction *GuestAction, stack_t *GuestStack) {
   ucontext_t* _context = (ucontext_t*)ucontext;
   mcontext_t* _mcontext = &_context->uc_mcontext;
-
+  fprintf(stderr, "handle guest\n");
   StoreThreadState(Signal, ucontext);
 
   // Set the new PC

@@ -222,6 +222,11 @@ int main(int argc, char **argv, char **const envp) {
     }
   }
 
+  auto RootFS = LDPath();
+  if (Args[0].substr(0, RootFS.size()) == RootFS) {
+    Args[0] = Args[0].substr(RootFS.size());
+  }
+
   InterpreterHandler(&Program, LDPath(), &Args);
 
   if (!std::filesystem::exists(Program)) {

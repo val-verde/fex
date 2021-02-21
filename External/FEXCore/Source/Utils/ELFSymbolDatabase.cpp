@@ -92,10 +92,12 @@ ELFSymbolDatabase::ELFSymbolDatabase(::ELFLoader::ELFContainer *file)
     }
   } while (!UnfilledDependencies.empty() && !NewLibraries.empty());
 #endif
-
-  LocalInfo.Container = File;
-  LocalInfo.Name = "/proc/self/exe";
-
+  {
+    auto Info = DynamicELFInfo.emplace_back(new ELFInfo{});
+    Info->Name = "/proc/self/exe";
+    Info->Container = File;
+  }
+  
   if (File->InterpreterELF) {
     auto Info = DynamicELFInfo.emplace_back(new ELFInfo{});
     Info->Name = "interpreter";
@@ -106,26 +108,31 @@ ELFSymbolDatabase::ELFSymbolDatabase(::ELFLoader::ELFContainer *file)
   FillInitializationOrder();
   FillSymbols();
 
-  if (LocalInfo.Container->WasDynamic() && File->GetMode() == ELFContainer::MODE_64BIT) {
+  /*if (DynamicELFInfo[0]->Container->WasDynamic() && File->GetMode() == ELFContainer::MODE_64BIT) {
     ELFBase = mmap(nullptr, ELFMemorySize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     FillMemoryLayouts(reinterpret_cast<uintptr_t>(ELFBase));
     FillInitializationOrder();
     FillSymbols();
 
-    FixedNoReplace = false;
+    DynamicELFInfo[0]->FixedNoReplace = false;
+  }*/
+
+  if (DynamicELFInfo[1]->Container->WasDynamic() && File->GetMode() == ELFContainer::MODE_64BIT) {
+    //DynamicELFInfo[1]->FixedNoReplace = false;
   }
 }
 
 ELFSymbolDatabase::~ELFSymbolDatabase() {
-  if (ELFBase) {
-    munmap(ELFBase, ELFMemorySize);
-    ELFBase = nullptr;
-  }
+  //if (ELFBase) {
+    //munmap(ELFBase, ELFMemorySize);
+    //ELFBase = nullptr;
+  //}
 }
 
 void ELFSymbolDatabase::FillMemoryLayouts(uint64_t DefinedBase) {
-  uint64_t ELFBases = DefinedBase;
-  ELFMemorySize = 0;
+  //uint64_t ELFBases = DefinedBase;
+  //ELFMemorySize = 0;
+  /*
   if (!DefinedBase) {
     if (File->GetMode() == ELFContainer::MODE_64BIT) {
       ELFBases = 0x1'0000'0000;
@@ -135,62 +142,77 @@ void ELFSymbolDatabase::FillMemoryLayouts(uint64_t DefinedBase) {
       // Which on Linux is at 0x1'0000
       ELFBases = 0x1'0000;
     }
-  }
+  }*/
   // We can only relocate the passed in ELF if it is dynamic
   // If it is EXEC then it HAS to end up in the base offset it chose
-  if (LocalInfo.Container->WasDynamic()) {
-    LocalInfo.CustomLayout = File->GetLayout();
-    uint64_t CurrentELFBase = std::get<0>(LocalInfo.CustomLayout);
-    uint64_t CurrentELFEnd = std::get<1>(LocalInfo.CustomLayout);
-    uint64_t CurrentELFAlignedSize = AlignUp(std::get<2>(LocalInfo.CustomLayout), 4096);
+  #if 0
+  if (DynamicELFInfo[0]->Container->WasDynamic()) {
+    DynamicELFInfo[0]->CustomLayout = File->GetLayout();
+    uint64_t CurrentELFBase = std::get<0>(DynamicELFInfo[0]->CustomLayout);
+    uint64_t CurrentELFEnd = std::get<1>(DynamicELFInfo[0]->CustomLayout);
+    uint64_t CurrentELFAlignedSize = AlignUp(std::get<2>(DynamicELFInfo[0]->CustomLayout), 4096);
 
     CurrentELFBase += ELFBases;
     CurrentELFEnd += ELFBases;
 
-    std::get<0>(LocalInfo.CustomLayout) = CurrentELFBase;
-    std::get<1>(LocalInfo.CustomLayout) = CurrentELFEnd;
-    std::get<2>(LocalInfo.CustomLayout) = CurrentELFAlignedSize;
-    LocalInfo.GuestBase = ELFBases;
+    std::get<0>(DynamicELFInfo[0]->CustomLayout) = CurrentELFBase;
+    std::get<1>(DynamicELFInfo[0]->CustomLayout) = CurrentELFEnd;
+    std::get<2>(DynamicELFInfo[0]->CustomLayout) = CurrentELFAlignedSize;
+    DynamicELFInfo[0]->GuestBase = ELFBases;
 
-    ELFBases += CurrentELFAlignedSize;
+    //ELFBases += CurrentELFAlignedSize;
     ELFMemorySize += CurrentELFAlignedSize;
   }
   else {
-    LocalInfo.CustomLayout = File->GetLayout();
-    uint64_t CurrentELFBase = std::get<0>(LocalInfo.CustomLayout);
-    uint64_t CurrentELFAlignedSize = AlignUp(std::get<2>(LocalInfo.CustomLayout), 4096);
+    DynamicELFInfo[0]->CustomLayout = File->GetLayout();
+    uint64_t CurrentELFBase = std::get<0>(DynamicELFInfo[0]->CustomLayout);
+    uint64_t CurrentELFAlignedSize = AlignUp(std::get<2>(DynamicELFInfo[0]->CustomLayout), 4096);
     if (CurrentELFBase < 0x10000) {
       // We can't allocate memory in the first 16KB,  Hopefully no elfs require this.
       LogMan::Msg::A("Elf requires memory mapped in the first 16kb");
     }
 
-    std::get<2>(LocalInfo.CustomLayout) = CurrentELFAlignedSize;
-    LocalInfo.GuestBase = 0;
+    std::get<2>(DynamicELFInfo[0]->CustomLayout) = CurrentELFAlignedSize;
+    DynamicELFInfo[0]->GuestBase = 0;
     ELFBases = CurrentELFBase + 0x1000000;
 
     ELFBases += CurrentELFAlignedSize;
     ELFMemorySize += CurrentELFAlignedSize;
   }
+#endif
 
   for (size_t i = 0; i < DynamicELFInfo.size(); ++i) {
     auto ELF = DynamicELFInfo[i]->Container;
-    auto Layout = ELF->GetLayout();
+    if (ELF->WasDynamic()) {
+      auto Layout = ELF->GetLayout();
 
-    uint64_t CurrentELFBase = std::get<0>(Layout);
-    uint64_t CurrentELFEnd = std::get<1>(Layout);
-    uint64_t CurrentELFAlignedSize = AlignUp(std::get<2>(Layout), 4096);
+      uint64_t CurrentELFBase = std::get<0>(Layout);
+      uint64_t CurrentELFEnd = std::get<1>(Layout);
+      uint64_t CurrentELFAlignedSize = AlignUp(std::get<2>(Layout), 4096);
 
-    CurrentELFBase += ELFBases;
-    CurrentELFEnd += ELFBases;
+      auto ELFBases = (uintptr_t)mmap(nullptr, CurrentELFAlignedSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
-    std::get<0>(Layout) = CurrentELFBase;
-    std::get<1>(Layout) = CurrentELFEnd;
-    std::get<2>(Layout) = CurrentELFAlignedSize;
-    DynamicELFInfo[i]->CustomLayout = Layout;
-    DynamicELFInfo[i]->GuestBase = ELFBases;
+      CurrentELFBase += ELFBases;
+      CurrentELFEnd += ELFBases;
 
-    ELFBases += CurrentELFAlignedSize;
-    ELFMemorySize += CurrentELFAlignedSize;
+      std::get<0>(Layout) = CurrentELFBase;
+      std::get<1>(Layout) = CurrentELFEnd;
+      std::get<2>(Layout) = CurrentELFAlignedSize;
+      DynamicELFInfo[i]->CustomLayout = Layout;
+      DynamicELFInfo[i]->GuestBase = ELFBases;
+      DynamicELFInfo[i]->FixedNoReplace = false;
+    } else {
+      DynamicELFInfo[i]->CustomLayout = File->GetLayout();
+      uint64_t CurrentELFBase = std::get<0>(DynamicELFInfo[i]->CustomLayout);
+      uint64_t CurrentELFAlignedSize = AlignUp(std::get<2>(DynamicELFInfo[i]->CustomLayout), 4096);
+      if (CurrentELFBase < 0x10000) {
+        // We can't allocate memory in the first 16KB,  Hopefully no elfs require this.
+        LogMan::Msg::A("Elf requires memory mapped in the first 16kb");
+      }
+
+      std::get<2>(DynamicELFInfo[i]->CustomLayout) = CurrentELFAlignedSize;
+      DynamicELFInfo[i]->GuestBase = 0;
+    }
   }
 }
 
@@ -226,7 +248,7 @@ void ELFSymbolDatabase::FillInitializationOrder() {
 void ELFSymbolDatabase::FillSymbols() {
   auto LocalSymbolFiller = [this](ELFLoader::ELFSymbol *Symbol) {
     Symbols.emplace_back(Symbol);
-    Symbol->Address += LocalInfo.GuestBase;
+    Symbol->Address += DynamicELFInfo[0]->GuestBase;
     SymbolMap[Symbol->Name] = Symbol;
     SymbolMapByAddress[Symbol->Address] = Symbol;
     if (Symbol->Bind == STB_GLOBAL) {
@@ -237,7 +259,7 @@ void ELFSymbolDatabase::FillSymbols() {
     }
   };
 
-  LocalInfo.Container->AddSymbols(LocalSymbolFiller);
+  DynamicELFInfo[0]->Container->AddSymbols(LocalSymbolFiller);
 
   // Let us fill symbols based on initialization order
   for (auto ELF : InitializationOrder) {
@@ -267,17 +289,17 @@ void ELFSymbolDatabase::MapMemoryRegions(std::function<void*(uint64_t, uint64_t,
     uint64_t ELFBase = std::get<0>(ELF.CustomLayout);
     uint64_t ELFSize = std::get<2>(ELF.CustomLayout);
     uint64_t OffsetFromBase = ELFBase - ELF.GuestBase;
-    ELF.ELFBase = static_cast<uint8_t*>(Mapper(ELFBase, ELFSize, FixedNoReplace)) - OffsetFromBase;
+    ELF.ELFBase = static_cast<uint8_t*>(Mapper(ELFBase, ELFSize, ELF.FixedNoReplace)) - OffsetFromBase;
   };
 
-  Map(LocalInfo);
+  //Map(LocalInfo);
   for (auto *ELF : DynamicELFInfo) {
     Map(*ELF);
   }
 }
 
 void ELFSymbolDatabase::WriteLoadableSections(::ELFLoader::ELFContainer::MemoryWriter Writer) {
-  File->WriteLoadableSections(Writer, LocalInfo.GuestBase);
+  //File->WriteLoadableSections(Writer, DynamicELFInfo[0]->GuestBase);
 
   for (size_t i = 0; i < DynamicELFInfo.size(); ++i) {
     auto ELF = DynamicELFInfo[i]->Container;
@@ -312,31 +334,31 @@ void ELFSymbolDatabase::HandleRelocations() {
     ELF->Container->FixupRelocations(ELF->ELFBase, ELF->GuestBase, SymbolGetter);
   }
 
-  LocalInfo.Container->FixupRelocations(LocalInfo.ELFBase, LocalInfo.GuestBase, SymbolGetter);
+  //DynamicELFInfo[0]->Container->FixupRelocations(DynamicELFInfo[0]->ELFBase, DynamicELFInfo[0]->GuestBase, SymbolGetter);
 }
 
 uint64_t ELFSymbolDatabase::GetInterpreterBase() const {
   if (File->InterpreterELF) {
-    return DynamicELFInfo[0]->GuestBase;
+    return DynamicELFInfo[1]->GuestBase;
   } else {
     return 0;
   }
 }
 
 uint64_t ELFSymbolDatabase::GetElfBase() const {
-  return std::get<0>(LocalInfo.CustomLayout);
+  return std::get<0>(DynamicELFInfo[0]->CustomLayout);
 }
 
 uint64_t ELFSymbolDatabase::DefaultRIP() const {
   if (File->InterpreterELF) {
-    return DynamicELFInfo[0]->GuestBase + DynamicELFInfo[0]->Container->GetEntryPoint();
+    return DynamicELFInfo[1]->GuestBase + DynamicELFInfo[1]->Container->GetEntryPoint();
   } else {
-    return File->GetEntryPoint() + LocalInfo.GuestBase;
+    return File->GetEntryPoint() + DynamicELFInfo[0]->GuestBase;
   }
 }
 
 uint64_t ELFSymbolDatabase::EntrypointRIP() const {
-  return File->GetEntryPoint() + LocalInfo.GuestBase;
+  return File->GetEntryPoint() + DynamicELFInfo[0]->GuestBase;
 }
 
 ELFSymbol const *ELFSymbolDatabase::GetSymbolInRange(RangeType Address) {

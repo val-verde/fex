@@ -34,14 +34,14 @@ private:
     ::ELFLoader::ELFContainer::MemoryLayout CustomLayout;
     void *ELFBase;
     uint64_t GuestBase;
+    bool FixedNoReplace {true};
   };
 
-  ELFInfo LocalInfo;
+  //ELFInfo LocalInfo;
   std::vector<ELFInfo*> DynamicELFInfo;
   std::vector<ELFInfo*> InitializationOrder;
-  uint64_t ELFMemorySize{};
-  bool FixedNoReplace {true};
-  void *ELFBase{};
+  //uint64_t ELFMemorySize{};
+  //void *ELFBase{};
 
   std::unordered_map<std::string, ELFInfo*> NameToELF;
   std::vector<std::string> LibrarySearchPaths;

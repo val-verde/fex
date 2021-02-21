@@ -6,6 +6,7 @@
 #include <fstream>
 #include <stdint.h>
 #include <vector>
+#include <unistd.h>
 
 namespace ELFLoader {
 bool ELFContainer::IsSupportedELF(std::string const &Filename) {
@@ -66,8 +67,30 @@ bool ELFContainer::IsSupportedELF(std::string const &Filename) {
   return false;
 }
 
+static std::string resolve_softlink(const std::string& RootFS, const std::string& FilePath )
+{
+    std::vector<char> buf(400);
+    ssize_t len;
+
+    std::string Absolute = RootFS + FilePath;
+
+    do
+    {
+        buf.resize(buf.size() + 100);
+        len = ::readlink(Absolute.c_str(), &(buf[0]), buf.size());
+    } while (buf.size() == len);
+
+    if (len > 0)
+    {
+        buf[len] = '\0';
+        return resolve_softlink(RootFS, &buf.at(0));
+    }
+    /* handle error */
+    return Absolute;
+}
+
 ELFContainer::ELFContainer(std::string const &Filename, std::string const &RootFS) {
-  if (!LoadELF(RootFS + Filename)) {
+  if (!LoadELF(resolve_softlink(RootFS, Filename)) {
     LogMan::Msg::E("Couldn't Load ELF file");
     return;
   }
@@ -83,7 +106,7 @@ ELFContainer::ELFContainer(std::string const &Filename, std::string const &RootF
     else {
       RawString = &RawFile.at(InterpreterHeader._64->p_offset);
     }
-    InterpreterELF = std::make_unique<ELFContainer>(RootFS + RawString, RootFS);
+    InterpreterELF = std::make_unique<ELFContainer>(RawString, RootFS);
   }
 
   CalculateMemoryLayouts();
@@ -842,7 +865,7 @@ void ELFContainer::PrintRelocationTable() const {
 void ELFContainer::FixupRelocations(void *ELFBase, uint64_t GuestELFBase, SymbolGetter Getter) {
   // done either by ld-linux or libc, no need to do this
   return;
-  
+  #if 0
   if (Mode == MODE_32BIT) {
   }
   else {
@@ -1009,6 +1032,7 @@ void ELFContainer::FixupRelocations(void *ELFBase, uint64_t GuestELFBase, Symbol
       }
     }
   }
+  #endif
 }
 
 void ELFContainer::PrintInitArray() const {

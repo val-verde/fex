@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <vector>
 #include <unistd.h>
+#include <filesystem>
 
 namespace ELFLoader {
 bool ELFContainer::IsSupportedELF(std::string const &Filename) {
@@ -83,14 +84,17 @@ static std::string resolve_softlink(const std::string& RootFS, const std::string
     if (len > 0)
     {
         buf[len] = '\0';
-        return resolve_softlink(RootFS, &buf.at(0));
+        if (buf[0] == '/')
+          return resolve_softlink(RootFS, &buf.at(0));
+        else
+          resolve_softlink(RootFS, std::filesystem::path(Absolute).parent_path().string() + &buf.at(0));
     }
     /* handle error */
     return Absolute;
 }
 
 ELFContainer::ELFContainer(std::string const &Filename, std::string const &RootFS) {
-  if (!LoadELF(resolve_softlink(RootFS, Filename)) {
+  if (!LoadELF(resolve_softlink(RootFS, Filename))) {
     LogMan::Msg::E("Couldn't Load ELF file");
     return;
   }

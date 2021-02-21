@@ -14,6 +14,7 @@
 #include <sys/vfs.h>
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <filesystem>
 
 namespace FEX::HLE {
 
@@ -32,6 +33,31 @@ FileManager::FileManager(FEXCore::Context::Context *ctx)
 FileManager::~FileManager() {
 }
 
+static std::string resolve_softlink(const std::string& RootFS, const std::string& FilePath )
+{
+    std::vector<char> buf(400);
+    ssize_t len;
+
+    std::string Absolute = RootFS + FilePath;
+
+    do
+    {
+        buf.resize(buf.size() + 100);
+        len = ::readlink(Absolute.c_str(), &(buf[0]), buf.size());
+    } while (buf.size() == len);
+
+    if (len > 0)
+    {
+        buf[len] = '\0';
+        if (buf[0] == '/')
+          return resolve_softlink(RootFS, &buf.at(0));
+        else
+          resolve_softlink(RootFS, std::filesystem::path(Absolute).parent_path().string() + &buf.at(0));
+    }
+    /* handle error */
+    return Absolute;
+}
+
 std::string FileManager::GetEmulatedPath(const char *pathname) {
   auto RootFSPath = LDPath();
   
@@ -41,11 +67,11 @@ std::string FileManager::GetEmulatedPath(const char *pathname) {
     return pathname;
   }
 
-  return RootFSPath + pathname;
+  return resolve_softlink(RootFSPath, pathname);
 }
 
 uint64_t FileManager::Open(const char *pathname, [[maybe_unused]] int flags, [[maybe_unused]] uint32_t mode) {
-  return ::open(pathname, flags, mode);
+  return ::open(GetEmulatedPath(pathname).c_str(), flags, mode);
 }
 
 uint64_t FileManager::Close(int fd) {

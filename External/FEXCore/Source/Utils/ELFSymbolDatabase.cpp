@@ -117,9 +117,9 @@ ELFSymbolDatabase::ELFSymbolDatabase(::ELFLoader::ELFContainer *file)
     DynamicELFInfo[0]->FixedNoReplace = false;
   }*/
 
-  if (DynamicELFInfo[1]->Container->WasDynamic() && File->GetMode() == ELFContainer::MODE_64BIT) {
+  //if (DynamicELFInfo[1]->Container->WasDynamic() && File->GetMode() == ELFContainer::MODE_64BIT) {
     //DynamicELFInfo[1]->FixedNoReplace = false;
-  }
+  //}
 }
 
 ELFSymbolDatabase::~ELFSymbolDatabase() {

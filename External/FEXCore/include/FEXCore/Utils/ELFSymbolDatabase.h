@@ -22,9 +22,10 @@ public:
   ::ELFLoader::ELFSymbol const *GetNoWeakSymbolInRange(RangeType Address);
 
   void GetInitLocations(std::vector<uint64_t> *Locations);
+  void GetSymbols(std::vector<uint64_t> *Locations);
 
-private:
   ::ELFLoader::ELFContainer *File;
+private:
 
   struct ELFInfo {
     std::string Name;

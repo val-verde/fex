@@ -635,7 +635,7 @@ namespace FEXCore::Context {
     if (!Thread->FrontendDecoder->DecodeInstructionsAtEntry(GuestCode, GuestRIP)) {
       if (Config.BreakOnFrontendFailure) {
         LogMan::Msg::E("Had Frontend decoder error");
-        Stop(false /* Ignore Current Thread */);
+        //Stop(false /* Ignore Current Thread */);
       }
       return { nullptr, nullptr, 0, 0, 0, 0 };
     }
@@ -893,6 +893,9 @@ namespace FEXCore::Context {
       GeneratedIR = true;
     }
 
+    if (IRList == nullptr) {
+      return { 0, 0, 0, 0, false, 0, 0};
+    }
     // Attempt to get the CPU backend to compile this code
     return { Thread->CPUBackend->CompileCode(IRList, DebugData, RAData), IRList, DebugData, RAData, GeneratedIR, StartAddr, Length};
   }
@@ -1074,7 +1077,7 @@ namespace FEXCore::Context {
       Length = _Length;
     }
 
-    LogMan::Throw::A(CodePtr != nullptr, "Failed to compile code %lX", GuestRIP);
+    //LogMan::Throw::A(CodePtr != nullptr, "Failed to compile code %lX", GuestRIP);
 
     // The core managed to compile the code.
 #if ENABLE_JITSYMBOLS

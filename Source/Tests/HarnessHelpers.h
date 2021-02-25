@@ -732,6 +732,10 @@ public:
     DB.GetInitLocations(Locations);
   }
 
+  void GetSymbols(std::vector<uint64_t> *Locations) {
+    DB.GetSymbols(Locations);
+  }
+
   void GetExecveArguments(std::vector<char const*> *Args) override { *Args = LoaderArgs; }
 
   void GetAuxv(uint64_t& addr, uint64_t& size) override {
@@ -747,9 +751,9 @@ public:
     return Info;
   }
 
-private:
   ::ELFLoader::ELFContainer File;
   ::ELFLoader::ELFSymbolDatabase DB;
+private:
 
   std::vector<std::string> Args;
   std::vector<std::string> EnvironmentVariables;

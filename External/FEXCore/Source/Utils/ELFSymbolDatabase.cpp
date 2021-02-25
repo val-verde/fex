@@ -95,7 +95,6 @@ ELFSymbolDatabase::ELFSymbolDatabase(::ELFLoader::ELFContainer *file)
 
   FillMemoryLayouts(0);
   FillInitializationOrder();
-  FillSymbols();
 
   if (LocalInfo.Container->WasDynamic() && File->GetMode() == ELFContainer::MODE_64BIT) {
     ELFBase = mmap(nullptr, ELFMemorySize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -104,6 +103,8 @@ ELFSymbolDatabase::ELFSymbolDatabase(::ELFLoader::ELFContainer *file)
     FillSymbols();
 
     FixedNoReplace = false;
+  } else {
+    FillSymbols();
   }
 }
 
@@ -211,6 +212,12 @@ void ELFSymbolDatabase::FillInitializationOrder() {
 }
 
 void ELFSymbolDatabase::FillSymbols() {
+  Symbols.clear();
+  SymbolMap.clear();
+  SymbolMapByAddress.clear();
+  SymbolMapGlobalOnly.clear();
+  SymbolMapNoWeak.clear();
+
   auto LocalSymbolFiller = [this](ELFLoader::ELFSymbol *Symbol) {
     Symbols.emplace_back(Symbol);
     Symbol->Address += LocalInfo.GuestBase;
@@ -330,6 +337,12 @@ void ELFSymbolDatabase::GetInitLocations(std::vector<uint64_t> *Locations) {
   // Walk the initialization order and fill the locations for initializations
   for (auto ELF : InitializationOrder) {
     ELF->Container->GetInitLocations(ELF->GuestBase, Locations);
+  }
+}
+
+void ELFSymbolDatabase::GetSymbols(std::vector<uint64_t> *Locations) {
+  for (auto &Symbol: Symbols) {
+    Locations->push_back(Symbol->Address);
   }
 }
 

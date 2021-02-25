@@ -27,6 +27,8 @@ DEF_OP(Fence) {
 DEF_OP(Break) {
   auto Op = IROp->C<IR::IROp_Break>();
   switch (Op->Reason) {
+    default:
+    LogMan::Msg::E("Unknown Break reason: %d", Op->Reason);
     case 0: // Hard fault
     case 5: // Guest ud2
       ud2();
@@ -64,7 +66,6 @@ DEF_OP(Break) {
       }
     break;
     }
-    default: LogMan::Msg::A("Unknown Break reason: %d", Op->Reason);
   }
 }
 

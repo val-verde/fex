@@ -9,6 +9,10 @@
 #include <FEXCore/Debug/X86Tables.h>
 #include <FEXCore/Utils/LogManager.h>
 
+std::vector<uint64_t> ExternalLocations;
+uint64_t ElfMinAddr;
+uint64_t ElfMaxAddr;
+
 namespace FEXCore::Frontend {
 using namespace FEXCore::X86Tables;
 
@@ -682,7 +686,10 @@ bool Decoder::NormalOpHeader(FEXCore::X86Tables::X86InstInfo const *Info, uint16
       uint8_t Byte2 = ReadByte();
       pp = Byte2 & 0b11;
       map_select = Byte1 & 0b11111;
-      LogMan::Throw::A(map_select >= 1 && map_select <= 3, "We don't understand a map_select of: %d", map_select);
+      if (!(map_select >= 1 && map_select <= 3)) {
+        LogMan::Msg::E("We don't understand a map_select of: %d", map_select);
+        return false;
+      }
     }
 
     uint16_t VEXOp = ReadByte();
@@ -938,9 +945,11 @@ void Decoder::BranchTargetInMultiblockRange() {
       TargetRIP = DecodeInst->PC + DecodeInst->InstSize + DecodeInst->Src[0].TypeLiteral.Literal;
       Conditional = false;
     break;
+    case 0xE8: // Call - Immediate target, We don't want to inline calls
+    ExternalLocations.push_back(DecodeInst->PC + DecodeInst->InstSize);
+    ExternalLocations.push_back(DecodeInst->PC + DecodeInst->InstSize + DecodeInst->Src[0].TypeLiteral.Literal);
     case 0xC2: // RET imm
     case 0xC3: // RET
-    case 0xE8: // Call - Immediate target, We don't want to inline calls
     default:
       return;
     break;
@@ -965,6 +974,8 @@ void Decoder::BranchTargetInMultiblockRange() {
         BlocksToDecode.find(TargetRIP) == BlocksToDecode.end()) {
       BlocksToDecode.emplace(TargetRIP);
     }
+  } else {
+    ExternalLocations.push_back(TargetRIP);
   }
 }
 
@@ -988,7 +999,7 @@ bool Decoder::DecodeInstructionsAtEntry(uint8_t const* _InstStream, uint64_t PC)
   // If we don't have symbols available then we become a bit optimistic about multiblock ranges
   if (!SymbolAvailable) {
     // If we don't have a symbol available then assume all branches are valid for multiblock
-    SymbolMaxAddress = ~0ULL;
+    SymbolMaxAddress = ElfMaxAddr;
     SymbolMinAddress = EntryPoint;
   }
 
@@ -1018,11 +1029,13 @@ bool Decoder::DecodeInstructionsAtEntry(uint8_t const* _InstStream, uint64_t PC)
 
       if (ErrorDuringDecoding) {
         LogMan::Msg::D("Couldn't Decode something at 0x%lx, Started at 0x%lx", PC + PCOffset, PC);
-        LogMan::Throw::A(Blocks.size() != 1, "Decode Error in entry block");
+        //LogMan::Throw::A(Blocks.size() != 1, "Decode Error in entry block");
 
         CurrentBlockDecoding.HasInvalidInstruction = true;
         if (ErrorDuringDecoding && Blocks.size() != 1) {
           ErrorDuringDecoding = false;
+        } else {
+          return false;
         }
         break;
       }

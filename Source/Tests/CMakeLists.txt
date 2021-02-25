@@ -78,3 +78,7 @@ target_include_directories(IRLoader PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source/)
 
 target_link_libraries(IRLoader ${LIBS} LinuxEmulation)
 
+
+add_executable(FEXAOTgen AOTGen.cpp)
+target_include_directories(FEXAOTgen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source/)
+target_link_libraries(FEXAOTgen ${LIBS} LinuxEmulation)

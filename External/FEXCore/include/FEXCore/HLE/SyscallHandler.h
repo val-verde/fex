@@ -28,8 +28,7 @@ namespace FEXCore::HLE {
   enum class SyscallOSABI {
     OS_LINUX64,
     OS_LINUX32,
-    OS_WIN64,
-    OS_WIN32,
+    OS_HANGOVER,
   };
 
   class SyscallHandler {

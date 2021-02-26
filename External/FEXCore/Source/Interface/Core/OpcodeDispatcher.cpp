@@ -67,12 +67,19 @@ void OpDispatchBuilder::SyscallOp(OpcodeArgs) {
     FEXCore::X86State::REG_RBP,
   };
 
+  static std::array<uint64_t, SyscallArgs> GPRIndexes_Hangover = {
+    FEXCore::X86State::REG_RCX,
+  };
+
   auto OSABI = CTX->SyscallHandler->GetOSABI();
   if (OSABI == FEXCore::HLE::SyscallOSABI::OS_LINUX64) {
     GPRIndexes = &GPRIndexes_64;
   }
   else if (OSABI == FEXCore::HLE::SyscallOSABI::OS_LINUX32) {
     GPRIndexes = &GPRIndexes_32;
+  }
+  else if (OSABI == FEXCore::HLE::SyscallOSABI::OS_HANGOVER) {
+    GPRIndexes = &GPRIndexes_Hangover;
   }
   else {
     LogMan::Msg::D("Unhandled OSABI syscall");

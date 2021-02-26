@@ -4522,7 +4522,7 @@ uint8_t OpDispatchBuilder::GetSrcSize(FEXCore::X86Tables::DecodedOp Op) {
 OrderedNode *OpDispatchBuilder::AppendSegmentOffset(OrderedNode *Value, uint32_t Flags, uint32_t DefaultPrefix, bool Override) {
   uint8_t GPRSize = CTX->Config.Is64BitMode ? 8 : 4;
 
-  if (CTX->Config.Is64BitMode) {
+  if (CTX->Config.Is64BitMode || 1) {
     if (Flags & FEXCore::X86Tables::DecodeFlags::FLAG_FS_PREFIX) {
       Value = _Add(Value, _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, fs), GPRClass));
     }

@@ -8476,7 +8476,7 @@ void InstallOpcodeHandlers(Context::OperatingMode Mode) {
   };
 
   const std::vector<std::tuple<uint8_t, uint8_t, FEXCore::X86Tables::OpDispatchPtr>> TwoByteOpTable_32 = {
-    {0x05, 1, &OpDispatchBuilder::NOPOp},
+    {0x05, 1, &OpDispatchBuilder::SyscallOp},
   };
 
   const std::vector<std::tuple<uint8_t, uint8_t, FEXCore::X86Tables::OpDispatchPtr>> TwoByteOpTable_64 = {

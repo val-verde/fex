@@ -97,7 +97,9 @@ void OpDispatchBuilder::SyscallOp(OpcodeArgs) {
     _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs) + GPRIndexes->at(5) * 8, GPRClass),
     _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs) + GPRIndexes->at(6) * 8, GPRClass));
 
-  _StoreContext(GPRClass, GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RAX]), SyscallOp);
+  auto SyscallABI = CTX->SyscallHandler->GetSyscallABI(0);
+  if (SyscallABI.HasReturn)
+    _StoreContext(GPRClass, GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RAX]), SyscallOp);
 }
 
 void OpDispatchBuilder::ThunkOp(OpcodeArgs) {

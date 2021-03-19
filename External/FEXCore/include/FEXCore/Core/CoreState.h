@@ -29,7 +29,8 @@ namespace FEXCore::Core {
   struct InternalThreadState;
 
   // Each guest JIT frame has one of these
-  struct CpuStateFrame {
+  
+  struct CpuStateFrame __attribute__((aligned (16))) {
     CPUState State;
 
     /**

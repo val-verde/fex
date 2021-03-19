@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <set>
 #include <mutex>
+#include <shared_mutex>
 #include <istream>
 #include <ostream>
 #include <functional>
@@ -50,6 +51,7 @@ namespace FEXCore::Context {
     MODE_RUN        = 0,
     MODE_SINGLESTEP = 1,
   };
+
 
   struct Context {
     friend class FEXCore::HLE::SyscallHandler;
@@ -206,6 +208,14 @@ namespace FEXCore::Context {
     FEXCore::JITSymbols Symbols;
 #endif
 
+  struct GlobalIREntry {
+    uint64_t StartAddr;
+    uint64_t Length;
+    std::unique_ptr<FEXCore::IR::IRListView, FEXCore::IR::IRListViewDeleter> IR;
+    std::unique_ptr<FEXCore::IR::RegisterAllocationData, FEXCore::IR::RegisterAllocationDataDeleter> RAData;
+    std::unique_ptr<FEXCore::Core::DebugData> DebugData;
+  };
+
   protected:
     void ClearCodeCache(FEXCore::Core::InternalThreadState *Thread, bool AlsoClearIRCache);
 
@@ -228,6 +238,12 @@ namespace FEXCore::Context {
     uint64_t StartingRIP;
     std::mutex ExitMutex;
     std::unique_ptr<GdbServer> DebugServer;
+
+    std::unordered_map<uint64_t, GlobalIREntry> GlobalIRCache;
+
+    std::mutex AOTIRCacheLock;
+    std::mutex GlobalIRCacheAddLock;
+    std::shared_mutex GlobalIRCacheRemoveLock;
 
     bool StartPaused = false;
     FEX_CONFIG_OPT(AppFilename, APP_FILENAME);

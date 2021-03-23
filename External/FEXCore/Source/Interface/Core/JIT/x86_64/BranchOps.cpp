@@ -25,6 +25,7 @@ DEF_OP(SignalReturn) {
     add(rsp, SpillSlots * 16); // + 8 to consume return address
   }
 
+  // XXXRELOCATEXXX
   mov(TMP1, ThreadSharedData.SignalHandlerReturnAddress);
   jmp(TMP1);
 }
@@ -75,13 +76,16 @@ DEF_OP(ExitFunction) {
     jmp(qword[rax]);
 
     L(l_BranchHost);
+    // XXXRELOCATEXXX
     dq(Dispatcher->ExitFunctionLinkerAddress);
     L(l_BranchGuest);
+    // XXXRELOCATEXXX
     dq(NewRIP);
   } else {
     Xbyak::Reg RipReg = GetSrc<RA_64>(Op->NewRIP.ID());
 
     // L1 Cache
+    // XXXRELOCATEXXX
     mov(rcx, ThreadState->LookupCache->GetL1Pointer());
     mov(rax, RipReg);
 
@@ -95,6 +99,7 @@ DEF_OP(ExitFunction) {
     jmp(qword[LookupBase + 0]);
 
     L(FullLookup);
+    // XXXRELOCATEXXX
     mov(rax, Dispatcher->AbsoluteLoopTopAddress);
     mov(qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, State.rip)], RipReg);
     jmp(rax);
@@ -230,6 +235,7 @@ DEF_OP(Thunk) {
 
   auto thunkFn = ThreadState->CTX->ThunkHandler->LookupThunk(Op->ThunkNameHash);
 
+  // XXXRELOCATEXXX
   mov(rax, reinterpret_cast<uintptr_t>(thunkFn));
   call(rax);
 
@@ -247,6 +253,7 @@ DEF_OP(ValidateCode) {
   int idx = 0;
 
   xor_(GetDst<RA_64>(Node), GetDst<RA_64>(Node));
+  // XXXRELOCATEXXX
   mov(rax, IR->GetHeader()->Entry + Op->Offset);
   mov(rbx, 1);
   while (len >= 4) {
@@ -280,10 +287,12 @@ DEF_OP(RemoveCodeEntry) {
     sub(rsp, 8); // Align
 
   mov(rdi, STATE);
+  // XXXRELOCATEXXX
   mov(rax, IR->GetHeader()->Entry); // imm64 move
   mov(rsi, rax);
 
 
+  // XXXRELOCATEXXX
   mov(rax, reinterpret_cast<uintptr_t>(&Context::Context::RemoveCodeEntryFromJit));
   call(rax);
 
@@ -314,6 +323,7 @@ DEF_OP(CPUID) {
   // Result: RAX, RDX. 4xi32
 
   mov (rsi, GetSrc<RA_64>(Op->Header.Args[0].ID()));
+  // XXXRELOCATEXXX
   mov (rdi, reinterpret_cast<uint64_t>(&CTX->CPUID));
 
   auto NumPush = RA64.size();
@@ -321,6 +331,7 @@ DEF_OP(CPUID) {
   if (NumPush & 1)
     sub(rsp, 8); // Align
 
+  // XXXRELOCATEXXX
   mov(rax, Ptr.Raw);
 
   // {rdi, rsi, rdx}

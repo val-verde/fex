@@ -27,6 +27,7 @@ DEF_OP(EntrypointOffset) {
   auto Op = IROp->C<IR::IROp_EntrypointOffset>();
 
   auto Constant = IR->GetHeader()->Entry + Op->Offset;
+  // XXXRELOCATEXXX
   mov(GetDst<RA_64>(Node), Constant);
 }
 

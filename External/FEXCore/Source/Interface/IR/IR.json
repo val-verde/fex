@@ -313,8 +313,9 @@
       "OpClass": "ALU",
       "HasDest": true,
       "DestClass": "GPR",
-      "FixedDestSize": "8",
+      "DestSize": "ConstantSize",
       "Args": [
+        "uint8_t", "ConstantSize",
         "uint64_t", "Constant"
       ]
     },
@@ -322,7 +323,9 @@
     "InlineConstant": {
       "Desc": ["Generates a 64bit constant to be used directly, non-FPR"],
       "OpClass": "ALU",
+      "DestSize": "ConstantSize",
       "Args": [
+        "uint8_t", "ConstantSize",
         "uint64_t", "Constant"
       ]
     },

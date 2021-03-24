@@ -104,7 +104,7 @@ void OpDispatchBuilder::ThunkOp(OpcodeArgs) {
     *reinterpret_cast<SHA256Sum*>(sha256)
   );
 
-  auto Constant = _Constant(GPRSize);
+  auto Constant = _Constant(GPRSize, GPRSize);
 
   auto OldSP = _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RSP]), GPRClass);
 
@@ -149,7 +149,7 @@ void OpDispatchBuilder::RETOp(OpcodeArgs) {
     _InvalidateFlags(~0UL); // all flags
   }
 
-  auto Constant = _Constant(GPRSize);
+  auto Constant = _Constant(GPRSize, GPRSize);
 
   auto OldSP = _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RSP]), GPRClass);
 
@@ -185,7 +185,7 @@ void OpDispatchBuilder::IRETOp(OpcodeArgs) {
 
   uint8_t GPRSize = CTX->Config.Is64BitMode ? 8 : 4;
 
-  auto Constant = _Constant(GPRSize);
+  auto Constant = _Constant(GPRSize, GPRSize);
 
   OrderedNode* SP = _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RSP]), GPRClass);
 
@@ -415,7 +415,7 @@ void OpDispatchBuilder::PUSHOp(OpcodeArgs) {
 
   OrderedNode *Src = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
 
-  auto Constant = _Constant(Size);
+  auto Constant = _Constant(Size, Size);
 
   auto OldSP = _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RSP]), GPRClass);
 
@@ -434,7 +434,7 @@ void OpDispatchBuilder::PUSHREGOp(OpcodeArgs) {
 
   OrderedNode *Src = LoadSource(GPRClass, Op, Op->Dest, Op->Flags, -1);
 
-  auto Constant = _Constant(Size);
+  auto Constant = _Constant(Size, Size);
 
   auto OldSP = _LoadContext(GPRSize, offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RSP]), GPRClass);
 
@@ -4971,15 +4971,15 @@ void OpDispatchBuilder::SetPackedRFLAG(bool Lower8, OrderedNode *Src) {
   if (Lower8) {
     NumFlags = 5;
   }
-  auto OneConst = _Constant(1);
+  auto OneConst = _Constant(4, 1);
   for (int i = 0; i < NumFlags; ++i) {
-    auto Tmp = _And(_Lshr(Src, _Constant(FlagOffsets[i])), OneConst);
+    auto Tmp = _And(_Lshr(Src, _Constant(1, FlagOffsets[i])), OneConst);
     SetRFLAG(Tmp, FlagOffsets[i]);
   }
 }
 
 OrderedNode *OpDispatchBuilder::GetPackedRFLAG(bool Lower8) {
-  OrderedNode *Original = _Constant(2);
+  OrderedNode *Original = _Constant(4, 2);
   uint8_t NumFlags = FlagOffsets.size();
   if (Lower8) {
     NumFlags = 5;
@@ -4988,7 +4988,7 @@ OrderedNode *OpDispatchBuilder::GetPackedRFLAG(bool Lower8) {
   for (int i = 0; i < NumFlags; ++i) {
     OrderedNode *Flag = _LoadFlag(FlagOffsets[i]);
     Flag = _Bfe(4, 32, 0, Flag);
-    Flag = _Lshl(Flag, _Constant(FlagOffsets[i]));
+    Flag = _Lshl(Flag, _Constant(1, FlagOffsets[i]));
     Original = _Or(Original, Flag);
   }
   return Original;
@@ -5005,7 +5005,7 @@ void OpDispatchBuilder::GenerateFlags_ADC(FEXCore::X86Tables::DecodedOp Op, Orde
 
   // SF
   {
-    auto SignBitConst = _Constant(GetSrcSize(Op) * 8 - 1);
+    auto SignBitConst = _Constant(1, GetSrcSize(Op) * 8 - 1);
 
     auto LshrOp = _Lshr(Res, SignBitConst);
     SetRFLAG<FEXCore::X86State::RFLAG_SF_LOC>(LshrOp);
@@ -5013,9 +5013,9 @@ void OpDispatchBuilder::GenerateFlags_ADC(FEXCore::X86Tables::DecodedOp Op, Orde
 
   // PF
   if (!CTX->Config.ABINoPF) {
-    auto PopCountOp = _Popcount(_And(Res, _Constant(0xFF)));
+    auto PopCountOp = _Popcount(_And(Res, _Constant(1, 0xFF)));
 
-    auto XorOp = _Xor(PopCountOp, _Constant(1));
+    auto XorOp = _Xor(PopCountOp, _Constant(1, 1));
     SetRFLAG<FEXCore::X86State::RFLAG_PF_LOC>(XorOp);
   } else {
     _InvalidateFlags(1UL << FEXCore::X86State::RFLAG_PF_LOC);
@@ -5320,6 +5320,7 @@ void OpDispatchBuilder::GenerateFlags_Logical(FEXCore::X86Tables::DecodedOp Op, 
   // PF
   if (!CTX->Config.ABINoPF) {
     auto EightBitMask = _Constant(0xFF);
+    
     auto PopCountOp = _Popcount(_And(Res, EightBitMask));
     auto XorOp = _Xor(PopCountOp, _Constant(1));
     SetRFLAG<FEXCore::X86State::RFLAG_PF_LOC>(XorOp);

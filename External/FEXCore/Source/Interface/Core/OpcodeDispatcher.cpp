@@ -1504,7 +1504,7 @@ void OpDispatchBuilder::MOVSegOp(OpcodeArgs) {
           _StoreContext(GPRClass, 2, offsetof(FEXCore::Core::CPUState, fs), Src);
         }
         break;
-      default: LogMan::Msg::A("Unknown segment register: %d", Op->Dest.TypeGPR.GPR);
+      default: return; //LogMan::Msg::A("Unknown segment register: %d", Op->Dest.TypeGPR.GPR);
     }
   }
   else {
@@ -1539,7 +1539,7 @@ void OpDispatchBuilder::MOVSegOp(OpcodeArgs) {
           Segment = _LoadContext(2, offsetof(FEXCore::Core::CPUState, fs), GPRClass);
         }
         break;
-      default: LogMan::Msg::A("Unknown segment register: %d", Op->Src[0].TypeGPR.GPR);
+      default: return; //LogMan::Msg::A("Unknown segment register: %d", Op->Src[0].TypeGPR.GPR);
     }
     StoreResult(GPRClass, Op, Segment, -1);
   }

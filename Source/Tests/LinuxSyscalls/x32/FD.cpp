@@ -26,6 +26,7 @@ $end_info$
 #include <sys/uio.h>
 #include <sys/vfs.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 
 ARG_TO_STR(FEX::HLE::x32::compat_ptr<FEX::HLE::x32::sigset_argpack32>, "%lx")
 
@@ -50,7 +51,8 @@ namespace FEX::HLE::x32 {
 #else
   uint32_t ioctl32(int fd, uint32_t request, uint32_t args) {
     // Not currently implemented on AArch64
-    return -ENOSYS;
+    uint64_t Result = ::ioctl(fd, request, (void*)args);
+    SYSCALL_ERRNO(); 
   }
 #endif
 

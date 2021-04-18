@@ -1493,13 +1493,13 @@ void OpDispatchBuilder::MOVSegOp(OpcodeArgs) {
         _StoreContext(GPRClass, 2, offsetof(FEXCore::Core::CPUState, ss), Src);
         break;
       case 6: // GS
-        LogMan::Throw::A(!CTX->Config.Is64BitMode, "We don't support modifying GS selector in 64bit mode!");
+        //LogMan::Throw::A(!CTX->Config.Is64BitMode, "We don't support modifying GS selector in 64bit mode!");
         if (!CTX->Config.Is64BitMode) {
           _StoreContext(GPRClass, 2, offsetof(FEXCore::Core::CPUState, gs), Src);
         }
         break;
       case 7: // FS
-        LogMan::Throw::A(!CTX->Config.Is64BitMode, "We don't support modifying FS selector in 64bit mode!");
+        //LogMan::Throw::A(!CTX->Config.Is64BitMode, "We don't support modifying FS selector in 64bit mode!");
         if (!CTX->Config.Is64BitMode) {
           _StoreContext(GPRClass, 2, offsetof(FEXCore::Core::CPUState, fs), Src);
         }

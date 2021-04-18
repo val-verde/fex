@@ -74,15 +74,15 @@ public:
     ListSize = List->Size();
 
     if (IsCopy) {
-      IRData = malloc(DataSize + ListSize);
-      ListData = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(IRData) + DataSize);
-      memcpy(IRData, reinterpret_cast<void*>(Data->Begin()), DataSize);
-      memcpy(ListData, reinterpret_cast<void*>(List->Begin()), ListSize);
+      IRDataInternal = malloc(DataSize + ListSize);
+      ListDataInternal = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(IRDataInternal) + DataSize);
+      memcpy(IRDataInternal, reinterpret_cast<void*>(Data->Begin()), DataSize);
+      memcpy(ListDataInternal, reinterpret_cast<void*>(List->Begin()), ListSize);
     }
     else {
       // We are just pointing to the data
-      IRData = reinterpret_cast<void*>(Data->Begin());
-      ListData = reinterpret_cast<void*>(List->Begin());
+      IRDataInternal = reinterpret_cast<void*>(Data->Begin());
+      ListDataInternal = reinterpret_cast<void*>(List->Begin());
     }
   }
 
@@ -90,46 +90,52 @@ public:
     DataSize = Old->DataSize;
     ListSize = Old->ListSize;
     if (IsCopy) {
-      IRData = malloc(DataSize + ListSize);
-      ListData = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(IRData) + DataSize);
-      memcpy(IRData, Old->IRData, DataSize);
-      memcpy(ListData, Old->ListData, ListSize);
+      IRDataInternal = malloc(DataSize + ListSize);
+      ListDataInternal = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(IRDataInternal) + DataSize);
+      memcpy(IRDataInternal, Old->IRDataInternal, DataSize);
+      memcpy(ListDataInternal, Old->ListDataInternal, ListSize);
     } else {
-      IRData = Old->IRData;
-      ListData = Old->ListData;
+      IRDataInternal = Old->IRDataInternal;
+      ListDataInternal = Old->ListDataInternal;
     }
-  }
-
-  IRListView(std::istream& stream) : IsCopy(true) {
-    stream.read((char*)&DataSize, sizeof(DataSize));
-    stream.read((char*)&ListSize, sizeof(ListSize));
-    
-    IRData = malloc(DataSize + ListSize);
-    ListData = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(IRData) + DataSize);
-    stream.read((char*)IRData, DataSize);
-    stream.read((char*)ListData, ListSize);
   }
 
   ~IRListView() {
     if (IsCopy) {
-      free (IRData);
+      free (IRDataInternal);
       // ListData is just offset from IRData
     }
   }
 
   void Serialize(std::ostream& stream) {
+    void *nul = nullptr;
+    //void *IRDataInternal;
+    stream.write((char*)&nul, sizeof(nul));
+    //void *ListDataInternal;
+    stream.write((char*)&nul, sizeof(nul));
+    //size_t DataSize;
     stream.write((char*)&DataSize, sizeof(DataSize));
+    //size_t ListSize;
     stream.write((char*)&ListSize, sizeof(ListSize));
-    stream.write((char*)IRData, DataSize);
-    stream.write((char*)ListData, ListSize);
+    //uint64_t IsCopy;
+    stream.write((char*)&IsCopy, sizeof(IsCopy));
+    //uint64_t IsShared;
+    uint64_t True = 1;
+    stream.write((char*)&True, sizeof(True));
+
+    // inline data
+    stream.write((char*)GetData(), DataSize);
+    stream.write((char*)GetListData(), ListSize);
+  }
+
+  size_t GetInlineSize() {
+    static_assert(sizeof(*this) == 48);
+    return sizeof(*this) + DataSize + ListSize;
   }
 
   IRListView *CreateCopy() {
     return new IRListView(this, true);
   }
-
-  uintptr_t const GetData() const { return reinterpret_cast<uintptr_t>(IRData); }
-  uintptr_t const GetListData() const { return reinterpret_cast<uintptr_t>(ListData); }
 
   size_t GetDataSize() const { return DataSize; }
   size_t GetListSize() const { return ListSize; }
@@ -172,7 +178,6 @@ public:
     return Wrapper.GetNode(GetListData());
   }
 
-  bool IsShared {false};
 private:
   struct BlockRange {
     using iterator = NodeIterator;
@@ -244,7 +249,7 @@ public:
   {
     OrderedNodeWrapper Wrapped;
     Wrapped.NodeOffset = sizeof(OrderedNode);
-    return iterator(reinterpret_cast<uintptr_t>(ListData), reinterpret_cast<uintptr_t>(IRData), Wrapped);
+    return iterator(reinterpret_cast<uintptr_t>(GetListData()), reinterpret_cast<uintptr_t>(GetData()), Wrapped);
   }
 
   /**
@@ -256,7 +261,7 @@ public:
   {
     OrderedNodeWrapper Wrapped;
     Wrapped.NodeOffset = 0;
-    return iterator(reinterpret_cast<uintptr_t>(ListData), reinterpret_cast<uintptr_t>(IRData), Wrapped);
+    return iterator(reinterpret_cast<uintptr_t>(GetListData()), reinterpret_cast<uintptr_t>(GetData()), Wrapped);
   }
 
   /**
@@ -264,26 +269,38 @@ public:
    * @return Iterator for this op
    */
   iterator at(OrderedNodeWrapper Wrapped) const noexcept {
-    return iterator(reinterpret_cast<uintptr_t>(ListData), reinterpret_cast<uintptr_t>(IRData), Wrapped);
+    return iterator(reinterpret_cast<uintptr_t>(GetListData()), reinterpret_cast<uintptr_t>(GetData()), Wrapped);
   }
 
   iterator at(uint32_t ID) const noexcept {
     OrderedNodeWrapper Wrapped;
     Wrapped.NodeOffset = ID * sizeof(OrderedNode);
-    return iterator(reinterpret_cast<uintptr_t>(ListData), reinterpret_cast<uintptr_t>(IRData), Wrapped);
+    return iterator(reinterpret_cast<uintptr_t>(GetListData()), reinterpret_cast<uintptr_t>(GetData()), Wrapped);
   }
 
   iterator at(OrderedNode *Node) const noexcept {
-    auto Wrapped = Node->Wrapped(reinterpret_cast<uintptr_t>(ListData));
-    return iterator(reinterpret_cast<uintptr_t>(ListData), reinterpret_cast<uintptr_t>(IRData), Wrapped);
+    auto Wrapped = Node->Wrapped(reinterpret_cast<uintptr_t>(GetListData()));
+    return iterator(reinterpret_cast<uintptr_t>(GetListData()), reinterpret_cast<uintptr_t>(GetData()), Wrapped);
+  }
+
+  uintptr_t const GetData() const {
+    return reinterpret_cast<uintptr_t>(IRDataInternal ? IRDataInternal : InlineData);
+  }
+
+  uintptr_t const GetListData() const {
+    return reinterpret_cast<uintptr_t>(ListDataInternal ? ListDataInternal : &InlineData[DataSize]);
   }
 
 private:
-  void *IRData;
-  void *ListData;
+  void *IRDataInternal;
+  void *ListDataInternal;
   size_t DataSize;
   size_t ListSize;
-  bool IsCopy;
+  uint64_t IsCopy;
+public:
+  uint64_t IsShared {0};
+
+  uint8_t InlineData[0];
 };
 
 struct IRListViewDeleter {

@@ -170,7 +170,7 @@ namespace DefaultFallbackCore {
     void Initialize() override {}
     bool NeedsOpDispatch() override { return false; }
 
-    void *CompileCode(FEXCore::IR::IRListView const *IR, FEXCore::Core::DebugData *DebugData, FEXCore::IR::RegisterAllocationData *RAData) override {
+    void *CompileCode(uint64_t Entry, FEXCore::IR::IRListView const *IR, FEXCore::Core::DebugData *DebugData, FEXCore::IR::RegisterAllocationData *RAData) override {
       LogMan::Msg::E("Fell back to default code handler at RIP: 0x%lx", ThreadState->CurrentFrame->State.rip);
       return nullptr;
     }
@@ -907,7 +907,6 @@ namespace FEXCore::Context {
               IRList = AOTEntry->GetIRData();
               //LogMan::Msg::D("using %s + %lx -> %lx\n", file->second.fileid.c_str(), AOTEntry->first, GuestRIP);
               // relocate
-              IRList->GetHeader()->Entry = GuestRIP;
 
               RAData = AOTEntry->GetRAData();;
               DebugData = new FEXCore::Core::DebugData();
@@ -948,7 +947,7 @@ namespace FEXCore::Context {
     }
 
     // Attempt to get the CPU backend to compile this code
-    return { Thread->CPUBackend->CompileCode(IRList, DebugData, RAData), IRList, DebugData, RAData, GeneratedIR, StartAddr, Length};
+    return { Thread->CPUBackend->CompileCode(GuestRIP, IRList, DebugData, RAData), IRList, DebugData, RAData, GeneratedIR, StartAddr, Length};
   }
 
   static bool readAll(int fd, void *data, size_t size) {
@@ -980,7 +979,7 @@ namespace FEXCore::Context {
     struct stat fileinfo;
     if (fstat(streamfd, &fileinfo) < 0)
       return false;
-    void *fileptr = mmap(nullptr, (fileinfo.st_size + 4095) & ~4095, PROT_READ | PROT_WRITE, MAP_PRIVATE, streamfd, 0);
+    void *fileptr = mmap(nullptr, (fileinfo.st_size + 4095) & ~4095, PROT_READ, MAP_PRIVATE, streamfd, 0);
 
     if (fileptr == MAP_FAILED)
       return false;

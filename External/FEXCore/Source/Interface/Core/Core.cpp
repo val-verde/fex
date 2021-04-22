@@ -977,7 +977,6 @@ namespace FEXCore::Context {
   }
 
   bool Context::LoadAOTIRCache(int streamfd) {
-    std::lock_guard<std::mutex> lk(AOTIRCacheLock);
     uint64_t tag;
     
     if (!readAll(streamfd, (char*)&tag, sizeof(tag)) || tag != 0xDEADBEEFC0D30003)
@@ -1005,7 +1004,7 @@ namespace FEXCore::Context {
 
     AOTIRCache[Module] = Array;
 
-    LogMan::Msg::D("AOTIR: Module %s has %ld functions", Module.c_str(), Array->Count);
+    LogMan::Msg::D("[%d:%d] AOTIR: Module %s has %ld functions", getpid(), gettid(), Module.c_str(), Array->Count);
 
     return true;
 
@@ -1399,6 +1398,8 @@ namespace FEXCore::Context {
     auto base_filename = std::filesystem::path(filename).filename().string();
 
     if (base_filename.size()) {
+      std::lock_guard<std::mutex> lk(AOTIRCacheLock);
+
       auto filename_hash = fasthash64(filename.c_str(), filename.size(), 0xBAADF00D);
 
       auto fileid = base_filename + "-" + std::to_string(filename_hash) + "-";
@@ -1414,7 +1415,11 @@ namespace FEXCore::Context {
       if (Config.AOTIRLoad && !AOTIRCache.contains(fileid) && AOTIRLoader) {
         auto streamfd = AOTIRLoader(fileid);
         if (streamfd != -1) {
-          LoadAOTIRCache(streamfd);
+          if (LoadAOTIRCache(streamfd)) {
+            if (!AOTIRCache.contains(fileid)) {
+              fprintf(stderr, "WTF?\n");
+            }
+          }
           close(streamfd);
         }
       }

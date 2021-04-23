@@ -3,6 +3,7 @@
 #include <FEXCore/Utils/LogManager.h>
 
 #include <map>
+#include <unordered_map>
 
 namespace FEXCore {
 class LookupCache {
@@ -205,7 +206,7 @@ private:
 
 
   std::map<BlockLinkTag, std::function<void()>> BlockLinks;
-  std::map<uint64_t, uint64_t> BlockList;
+  std::unordered_map<uint64_t, uint64_t> BlockList;
 
   constexpr static size_t CODE_SIZE = 128 * 1024 * 1024;
   constexpr static size_t SIZE_PER_PAGE = 4096 * sizeof(LookupCacheEntry);

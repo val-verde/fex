@@ -58,6 +58,8 @@ namespace FEXCore::Context {
     uint64_t crc;
     IR::IRListView *IR;
     IR::RegisterAllocationData *RAData;
+    void *HostCode;
+    uint64_t HostCodeLen;
   };
 
   struct AOTIRInlineEntry {
@@ -69,6 +71,7 @@ namespace FEXCore::Context {
 
       IR::RegisterAllocationData *GetRAData();
       IR::IRListView *GetIRData();
+      void *GetCodeData();
   };
 
   struct AOTIRBinaryEntry {
@@ -113,6 +116,7 @@ namespace FEXCore::Context {
       FEX_CONFIG_OPT(AOTIRCapture, AOTIRCAPTURE);
       FEX_CONFIG_OPT(AOTIRGenerate, AOTIRGENERATE);
       FEX_CONFIG_OPT(AOTIRLoad, AOTIRLOAD);
+      FEX_CONFIG_OPT(AOTOBJLoad, AOTOBJLOAD);
       FEX_CONFIG_OPT(SMCChecks, SMCCHECKS);
       FEX_CONFIG_OPT(Core, CORE);
       FEX_CONFIG_OPT(MaxInstPerBlock, MAXINST);

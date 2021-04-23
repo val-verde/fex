@@ -9,7 +9,7 @@ namespace FEXCore::Core {
   struct __attribute__((packed)) CPUState {
     uint64_t rip; ///< Current core's RIP. May not be entirely accurate while JIT is active
     uint64_t gregs[16];
-    uint64_t : 64;
+    uint64_t lastEntrypoint;
     uint64_t xmm[16][2];
     uint16_t es, cs, ss, ds;
     uint64_t gs;

@@ -31,9 +31,9 @@ DEF_OP(Constant) {
 
 DEF_OP(EntrypointOffset) {
   auto Op = IROp->C<IR::IROp_EntrypointOffset>();
-
-  auto Constant = Entry + Op->Offset;
-  mov(GetDst<RA_64>(Node), Constant);
+  mov(GetDst<RA_64>(Node), qword[r14 + offsetof(FEXCore::Core::CPUState, lastEntrypoint)]);
+  //auto Constant = Entry + Op->Offset;
+  add(GetDst<RA_64>(Node), Op->Offset);
 }
 
 DEF_OP(InlineConstant) {

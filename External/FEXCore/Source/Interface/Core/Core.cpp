@@ -864,7 +864,15 @@ namespace FEXCore::Context {
     return (IR::IRListView *)&InlineData[Offset];
   }
 
+  void *AOTIRInlineEntry::GetCodeData() {
+    auto IRData = GetIRData();
+    auto Offset = IRData->GetInlineSize();
+
+    return &((char*)IRData)[Offset];
+  }
+
   std::tuple<void *, FEXCore::IR::IRListView *, FEXCore::Core::DebugData *, FEXCore::IR::RegisterAllocationData *, bool, uint64_t, uint64_t> Context::CompileCode(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP) {
+    void *CodeData {};
     FEXCore::IR::IRListView *IRList {};
     FEXCore::IR::IRListView *IRListC {};
     FEXCore::Core::DebugData *DebugData {};
@@ -929,6 +937,8 @@ namespace FEXCore::Context {
               DebugData = new FEXCore::Core::DebugData();
               StartAddr = MappedStart;
               Length = AOTEntry->GuestLength;
+              if (Config.AOTOBJLoad)
+                CodeData = AOTEntry->GetCodeData();
 
               GeneratedIR = true;
             } else {
@@ -959,11 +969,6 @@ namespace FEXCore::Context {
 
         if (memcmp((void*)IRList->GetListData(), (void*)IRListC->GetListData(), IRList->GetListSize()) != 0) {
           printf("IR List data missmatch\n");
-          dump = true;
-        }
-
-        if (memcmp((void*)RAData->Map, (void*)RADataC->Map, RAData->MapCount) != 0) {
-          printf("RA data missmatch\n");
           dump = true;
         }
         if (dump) {
@@ -997,8 +1002,14 @@ namespace FEXCore::Context {
     if (IRList == nullptr) {
       return { nullptr, nullptr, nullptr, nullptr, false, 0, 0 };
     }
+
+    if (CodeData == nullptr) {
+      CodeData = Thread->CPUBackend->CompileCode(GuestRIP, IRList, DebugData, RAData);
+    }
+
+    *(uint64_t*)((char*)CodeData+2) = GuestRIP;
     // Attempt to get the CPU backend to compile this code
-    return { Thread->CPUBackend->CompileCode(GuestRIP, IRList, DebugData, RAData), IRList, DebugData, RAData, GeneratedIR, StartAddr, Length};
+    return { CodeData, IRList, DebugData, RAData, GeneratedIR, StartAddr, Length};
   }
 
   static bool readAll(int fd, void *data, size_t size) {
@@ -1029,7 +1040,7 @@ namespace FEXCore::Context {
     struct stat fileinfo;
     if (fstat(streamfd, &fileinfo) < 0)
       return false;
-    void *fileptr = mmap(nullptr, (fileinfo.st_size + 4095) & ~4095, PROT_READ, MAP_PRIVATE, streamfd, 0);
+    void *fileptr = mmap(nullptr, (fileinfo.st_size + 4095) & ~4095, PROT_READ | PROT_EXEC | PROT_WRITE, MAP_PRIVATE, streamfd, 0);
 
     if (fileptr == MAP_FAILED)
       return false;
@@ -1178,6 +1189,8 @@ namespace FEXCore::Context {
         DataOffset += entry.second.RAData->Size(entry.second.RAData->MapCount);
 
         DataOffset += entry.second.IR->GetInlineSize();
+
+        DataOffset += entry.second.HostCodeLen;
       }
 
       // AOTIRInlineEntry
@@ -1193,6 +1206,9 @@ namespace FEXCore::Context {
         
         // IRData (inline)
         entry.second.IR->Serialize(*stream);
+
+        // HostCode (inline)
+        stream->write((char*)entry.second.HostCode, entry.second.HostCodeLen);
       }
     }
 
@@ -1291,7 +1307,9 @@ namespace FEXCore::Context {
         if (file != AddrToFile.begin()) {
           --file;
           if (file->second.Start <= StartAddr && (file->second.Start + file->second.Len) >= (StartAddr + Length)) {
-            AOTIRCaptureCache[file->second.fileid].insert({GuestRIP - file->second.Start + file->second.Offset, {StartAddr - file->second.Start + file->second.Offset, Length, hash, IRList, RAData}});
+            auto LocalCode = malloc(DebugData->HostCodeSize);
+            memcpy(LocalCode, CodePtr, DebugData->HostCodeSize);
+            AOTIRCaptureCache[file->second.fileid].insert({GuestRIP - file->second.Start + file->second.Offset, {StartAddr - file->second.Start + file->second.Offset, Length, hash, IRList, RAData, LocalCode, DebugData->HostCodeSize}});
           }
         }
       }

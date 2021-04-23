@@ -203,7 +203,7 @@
         "Type": "bool",
         "Default": "false",
         "Desc": [
-          "Captures IR and generates an AOT IR cache.",
+          "Captures IR and generates an AOT IR/OBJ cache.",
           "Captures both the loaded executable and libraries it loads."
         ]
       },
@@ -211,7 +211,7 @@
         "Type": "bool",
         "Default": "false",
         "Desc": [
-          "Scans file for executable code and generates an AOT IR cache.",
+          "Scans file for executable code and generates an AOT IR/OBJ cache.",
           "Does not run the executable."
         ]
       },
@@ -220,6 +220,13 @@
         "Default": "false",
         "Desc": [
           "Loads an AOT IR cache for the loaded executable."
+        ]
+      },
+      "AOTOBJLoad": {
+        "Type": "bool",
+        "Default": "false",
+        "Desc": [
+          "Loads an AOT OBJ cache for the loaded executable."
         ]
       }
     }

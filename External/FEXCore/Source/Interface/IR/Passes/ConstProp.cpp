@@ -863,7 +863,7 @@ bool ConstProp::Run(IREmitter *IREmit) {
             Changed = true;
           } else {
             auto NewRIP = IREmit->GetOpHeader(Op->NewRIP);
-            if (NewRIP->Op == OP_ENTRYPOINTOFFSET) {
+            if (NewRIP->Op == OP_ENTRYPOINTOFFSET && 0) {
               auto EO = NewRIP->C<IR::IROp_EntrypointOffset>();
               IREmit->SetWriteCursor(CurrentIR.GetNode(Op->NewRIP));
 

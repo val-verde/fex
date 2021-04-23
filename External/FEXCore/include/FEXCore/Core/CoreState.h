@@ -30,6 +30,9 @@ namespace FEXCore::Core {
       void *SignalHandlerReturnAddress;
       void *SignalHandlerRefCounterPtr;
       void *AbsoluteLoopTopAddress;
+      void *L1Pointer;
+      void *SyscallHandler;
+      void *CPUID;
     } meta;
   };
   static_assert(offsetof(CPUState, xmm) % 16 == 0, "xmm needs to be 128bit aligned!");

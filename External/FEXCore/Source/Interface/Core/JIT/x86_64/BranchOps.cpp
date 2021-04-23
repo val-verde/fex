@@ -88,7 +88,7 @@ DEF_OP(ExitFunction) {
     Xbyak::Reg RipReg = GetSrc<RA_64>(Op->NewRIP.ID());
 
     // L1 Cache
-    mov(rcx, ThreadState->LookupCache->GetL1Pointer());
+    mov(rcx, qword[r14 + offsetof(FEXCore::Core::CPUState, meta.L1Pointer)]);
     mov(rax, RipReg);
 
     and_(rax, LookupCache::L1_ENTRIES_MASK);
@@ -196,7 +196,7 @@ DEF_OP(Syscall) {
   }
 
   mov(rsi, STATE); // Move thread in to rsi
-  mov(rdi, reinterpret_cast<uint64_t>(CTX->SyscallHandler));
+  mov(rdi, qword[r14 + offsetof(FEXCore::Core::CPUState, meta.SyscallHandler)]);
   mov(rdx, rsp);
 
   mov(rax, reinterpret_cast<uint64_t>(FEXCore::Context::HandleSyscall));
@@ -321,7 +321,7 @@ DEF_OP(CPUID) {
 
   mov (rsi, GetSrc<RA_64>(Op->Header.Args[0].ID()));
   mov (rdx, GetSrc<RA_64>(Op->Header.Args[1].ID()));
-  mov (rdi, reinterpret_cast<uint64_t>(&CTX->CPUID));
+  mov (rdi, qword[r14 + offsetof(FEXCore::Core::CPUState, meta.CPUID)]);
 
   auto NumPush = RA64.size();
 

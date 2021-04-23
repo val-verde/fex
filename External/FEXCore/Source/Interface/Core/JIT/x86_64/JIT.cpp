@@ -337,6 +337,10 @@ X86JITCore::X86JITCore(FEXCore::Context::Context *ctx, FEXCore::Core::InternalTh
     ThreadSharedData.SignalHandlerRefCounterPtr = &Dispatcher->SignalHandlerRefCounter;
     ThreadSharedData.SignalHandlerReturnAddress = Dispatcher->SignalHandlerReturnAddress;
     ThreadSharedData.Dispatcher = Dispatcher.get();
+    
+    Thread->BaseFrameState.State.meta.L1Pointer = (void*)ThreadState->LookupCache->GetL1Pointer();
+    Thread->BaseFrameState.State.meta.SyscallHandler = (void*)CTX->SyscallHandler;
+    Thread->BaseFrameState.State.meta.CPUID = (void*)&CTX->CPUID;
 
     // This will register the host signal handler per thread, which is fine
     CTX->SignalDelegation->RegisterHostSignalHandler(SIGILL, [](FEXCore::Core::InternalThreadState *Thread, int Signal, void *info, void *ucontext) -> bool {

@@ -46,6 +46,9 @@ public:
       CodePages[CurrentPage].push_back(Address);
     }
 
+    auto &L1Entry = reinterpret_cast<LookupCacheEntry*>(L1Pointer)[Address & L1_ENTRIES_MASK];
+    L1Entry.GuestCode = Address;
+    L1Entry.HostCode = (uintptr_t)HostCode;
     // no need to update L1 or L2, they will get updated on first lookup
   }
 

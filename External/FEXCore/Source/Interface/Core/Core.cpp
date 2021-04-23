@@ -868,7 +868,7 @@ namespace FEXCore::Context {
     auto IRData = GetIRData();
     auto Offset = IRData->GetInlineSize();
 
-    return &((char*)IRData)[Offset];
+    return InlineData; //&((char*)IRData)[Offset];
   }
 
   std::tuple<void *, FEXCore::IR::IRListView *, FEXCore::Core::DebugData *, FEXCore::IR::RegisterAllocationData *, bool, uint64_t, uint64_t> Context::CompileCode(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP) {
@@ -930,7 +930,7 @@ namespace FEXCore::Context {
             auto hash = fasthash64((void*)MappedStart, AOTEntry->GuestLength, 0);
             if (hash == AOTEntry->GuestHash) {
               IRList = AOTEntry->GetIRData();
-              //LogMan::Msg::D("using %s + %lx -> %lx\n", file->second.fileid.c_str(), AOTEntry->first, GuestRIP);
+              //LogMan::Msg::D("using %s + %lx\n", file->second.fileid.c_str(), GuestRIP);
               // relocate
 
               RAData = AOTEntry->GetRAData();;
@@ -940,7 +940,7 @@ namespace FEXCore::Context {
               if (Config.AOTOBJLoad)
                 CodeData = AOTEntry->GetCodeData();
 
-              GeneratedIR = true;
+              GeneratedIR = false;
             } else {
               LogMan::Msg::I("AOTIR: hash check failed %lx\n", MappedStart);
             }
@@ -1047,10 +1047,10 @@ namespace FEXCore::Context {
 
     auto Array = (AOTIRBinaryArray *)((char*)fileptr + sizeof(tag) + sizeof(ModSize) + ((ModSize+31) & ~31));
 
-    AOTIRCache[Module] = Array;
+    AOTIRCache[Module] = Array; 
 
     LogMan::Msg::D("[%d:%d] AOTIR: Module %s has %ld functions", getpid(), gettid(), Module.c_str(), Array->Count);
-    madvise(Array, sizeof(Array) + Array->Count * sizeof(Array->Entries[0]), MADV_WILLNEED);
+    //madvise(Array, sizeof(Array) + Array->Count * sizeof(Array->Entries[0]), MADV_WILLNEED);
 
     return true;
 
@@ -1185,11 +1185,11 @@ namespace FEXCore::Context {
 
         DataOffset += sizeof(entry.second.crc);
         DataOffset += sizeof(entry.second.len);
-
+#if ONLY_OBJ
         DataOffset += entry.second.RAData->Size(entry.second.RAData->MapCount);
 
         DataOffset += entry.second.IR->GetInlineSize();
-
+#endif
         DataOffset += entry.second.HostCodeLen;
       }
 
@@ -1200,13 +1200,13 @@ namespace FEXCore::Context {
 
         //GuestLength
         stream->write((char*)&entry.second.len, sizeof(entry.second.len));
-        
+#if ONLY_OBJ  
         // RAData (inline)
         stream->write((char*)entry.second.RAData, entry.second.RAData->Size(entry.second.RAData->MapCount));
         
         // IRData (inline)
         entry.second.IR->Serialize(*stream);
-
+#endif
         // HostCode (inline)
         stream->write((char*)entry.second.HostCode, entry.second.HostCodeLen);
       }

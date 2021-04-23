@@ -656,6 +656,8 @@ namespace FEXCore::Context {
 
     Thread->OpDispatcher->BeginFunction(GuestRIP, CodeBlocks);
 
+    uint8_t GPRSize = Config.Is64BitMode ? 8 : 4;
+
     for (size_t j = 0; j < CodeBlocks->size(); ++j) {
       FEXCore::Frontend::Decoder::DecodedBlocks const &Block = CodeBlocks->at(j);
       // Set the block entry point
@@ -670,8 +672,7 @@ namespace FEXCore::Context {
       uint64_t InstsInBlock = Block.NumInstructions;
 
       if (Block.HasInvalidInstruction) {
-        uint8_t GPRSize = Config.Is64BitMode ? 8 : 4;
-        Thread->OpDispatcher->_ExitFunction(Thread->OpDispatcher->_Constant(GPRSize * 8, Block.Entry));
+        Thread->OpDispatcher->_ExitFunction(Thread->OpDispatcher->_EntrypointOffset(Block.Entry - GuestRIP, GPRSize));
         break;
       }
 
@@ -696,7 +697,7 @@ namespace FEXCore::Context {
 
           Thread->OpDispatcher->SetCurrentCodeBlock(CodeWasChangedBlock);
           Thread->OpDispatcher->_RemoveCodeEntry();
-          Thread->OpDispatcher->_ExitFunction(Thread->OpDispatcher->_Constant(Block.Entry + BlockInstructionsLength));
+          Thread->OpDispatcher->_ExitFunction(Thread->OpDispatcher->_EntrypointOffset(Block.Entry + BlockInstructionsLength, GPRSize));
 
           auto NextOpBlock = Thread->OpDispatcher->CreateNewCodeBlockAfter(CurrentBlock);
 
@@ -736,7 +737,7 @@ namespace FEXCore::Context {
             uint8_t GPRSize = Config.Is64BitMode ? 8 : 4;
 
             // We had some instructions. Early exit
-            Thread->OpDispatcher->_ExitFunction(Thread->OpDispatcher->_Constant(GPRSize * 8, Block.Entry + BlockInstructionsLength));
+            Thread->OpDispatcher->_ExitFunction(Thread->OpDispatcher->_EntrypointOffset(Block.Entry + BlockInstructionsLength - GuestRIP, GPRSize));
             break;
           }
         }
@@ -865,8 +866,10 @@ namespace FEXCore::Context {
 
   std::tuple<void *, FEXCore::IR::IRListView *, FEXCore::Core::DebugData *, FEXCore::IR::RegisterAllocationData *, bool, uint64_t, uint64_t> Context::CompileCode(FEXCore::Core::InternalThreadState *Thread, uint64_t GuestRIP) {
     FEXCore::IR::IRListView *IRList {};
+    FEXCore::IR::IRListView *IRListC {};
     FEXCore::Core::DebugData *DebugData {};
     FEXCore::IR::RegisterAllocationData *RAData {};
+    FEXCore::IR::RegisterAllocationData *RADataC {};
     bool GeneratedIR {};
     uint64_t StartAddr {};
     uint64_t Length {};
@@ -945,6 +948,37 @@ namespace FEXCore::Context {
       // Setup pointers to internal structures
       IRList = IRCopy;
       RAData = RACopy;
+
+      if (IRListC != nullptr) {
+
+        bool dump = false;
+        if (memcmp((void*)IRList->GetData(), (void*)IRListC->GetData(), IRList->GetDataSize()) != 0) {
+          printf("IR data missmatch\n");
+          dump = true;
+        }
+
+        if (memcmp((void*)IRList->GetListData(), (void*)IRListC->GetListData(), IRList->GetListSize()) != 0) {
+          printf("IR List data missmatch\n");
+          dump = true;
+        }
+
+        if (memcmp((void*)RAData->Map, (void*)RADataC->Map, RAData->MapCount) != 0) {
+          printf("RA data missmatch\n");
+          dump = true;
+        }
+        if (dump) {
+          {
+            std::stringstream out;
+            FEXCore::IR::Dump(&out, IRList, RAData);
+            printf("IR New-%s 0x%lx:\n%s\n@@@@@\n", "post", GuestRIP, out.str().c_str());
+          }
+          {
+            std::stringstream out;
+            FEXCore::IR::Dump(&out, IRListC, RADataC);
+            printf("IR InFile-%s 0x%lx:\n%s\n@@@@@\n", "post", GuestRIP, out.str().c_str());
+          }
+        }
+      }
       DebugData = new FEXCore::Core::DebugData();
       StartAddr = _StartAddr;
       Length = _Length;
@@ -1005,6 +1039,7 @@ namespace FEXCore::Context {
     AOTIRCache[Module] = Array;
 
     LogMan::Msg::D("[%d:%d] AOTIR: Module %s has %ld functions", getpid(), gettid(), Module.c_str(), Array->Count);
+    madvise(Array, sizeof(Array) + Array->Count * sizeof(Array->Entries[0]), MADV_WILLNEED);
 
     return true;
 

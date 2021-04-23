@@ -23,6 +23,14 @@ namespace FEXCore::Core {
       uint32_t base;
     } gdt[32];
     uint16_t FCW;
+
+    struct {
+      void *ThreadPauseHandlerAddress;
+      void *ThreadStopHandlerAddress;
+      void *SignalHandlerReturnAddress;
+      void *SignalHandlerRefCounterPtr;
+      void *AbsoluteLoopTopAddress;
+    } meta;
   };
   static_assert(offsetof(CPUState, xmm) % 16 == 0, "xmm needs to be 128bit aligned!");
 

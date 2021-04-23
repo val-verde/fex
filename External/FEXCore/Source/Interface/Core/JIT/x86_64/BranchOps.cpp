@@ -31,7 +31,7 @@ DEF_OP(SignalReturn) {
     add(rsp, SpillSlots * 16); // + 8 to consume return address
   }
 
-  mov(TMP1, ThreadSharedData.SignalHandlerReturnAddress);
+  mov(TMP1, qword[r14 + offsetof(FEXCore::Core::CPUState, meta.SignalHandlerReturnAddress)]);
   jmp(TMP1);
 }
 
@@ -42,7 +42,7 @@ DEF_OP(CallbackReturn) {
   }
 
   // Make sure to adjust the refcounter so we don't clear the cache now
-  mov(rax, reinterpret_cast<uint64_t>(ThreadSharedData.SignalHandlerRefCounterPtr));
+  mov(rax, qword[r14 + offsetof(FEXCore::Core::CPUState, meta.SignalHandlerRefCounterPtr)]);
   sub(dword [rax], 1);
 
   // We need to adjust an additional 8 bytes to get back to the original "misaligned" RSP state
@@ -101,7 +101,7 @@ DEF_OP(ExitFunction) {
     jmp(qword[LookupBase + 0]);
 
     L(FullLookup);
-    mov(rax, ThreadSharedData.Dispatcher->AbsoluteLoopTopAddress);
+    mov(rax, qword[r14 + offsetof(FEXCore::Core::CPUState, meta.AbsoluteLoopTopAddress)]);
     mov(qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, State.rip)], RipReg);
     jmp(rax);
   }

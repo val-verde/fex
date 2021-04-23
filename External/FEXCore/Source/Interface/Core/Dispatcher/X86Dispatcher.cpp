@@ -71,7 +71,7 @@ X86Dispatcher::X86Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::Inte
   Label ThreadPauseHandler;
 
   L(LoopTop);
-  AbsoluteLoopTopAddressFillSRA = AbsoluteLoopTopAddress = getCurr<uint64_t>();
+  Thread->BaseFrameState.State.meta.AbsoluteLoopTopAddress = (void*)(AbsoluteLoopTopAddressFillSRA = AbsoluteLoopTopAddress = getCurr<uint64_t>());
 
   {
     // Load our RIP
@@ -159,7 +159,7 @@ X86Dispatcher::X86Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::Inte
 
   {
     L(ExitBlock);
-    ThreadStopHandlerAddress = getCurr<uint64_t>();
+    Thread->BaseFrameState.State.meta.ThreadStopHandlerAddress = (void*)(ThreadStopHandlerAddress = getCurr<uint64_t>());
 
     add(rsp, 8);
 
@@ -211,7 +211,7 @@ X86Dispatcher::X86Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::Inte
 
   {
     // Pause handler
-    ThreadPauseHandlerAddress = getCurr<uint64_t>();
+    Thread->BaseFrameState.State.meta.ThreadPauseHandlerAddress = (void*)(ThreadPauseHandlerAddress = getCurr<uint64_t>());
     L(ThreadPauseHandler);
 
     mov(rdi, reinterpret_cast<uintptr_t>(CTX));
@@ -239,7 +239,7 @@ X86Dispatcher::X86Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::Inte
     // First thing we need to move the thread state pointer back in to our register
     mov(STATE, rdi);
     // XXX: XMM?
-
+    Thread->BaseFrameState.State.meta.SignalHandlerRefCounterPtr = &SignalHandlerRefCounter;
     // Make sure to adjust the refcounter so we don't clear the cache now
     mov(rax, reinterpret_cast<uint64_t>(&SignalHandlerRefCounter));
     add(dword [rax], 1);
@@ -263,7 +263,7 @@ X86Dispatcher::X86Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::Inte
 
   {
     // Signal return handler
-    SignalHandlerReturnAddress = getCurr<uint64_t>();
+    Thread->BaseFrameState.State.meta.SignalHandlerReturnAddress = (void*)(SignalHandlerReturnAddress = getCurr<uint64_t>());
 
     ud2();
   }

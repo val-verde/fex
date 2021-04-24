@@ -840,21 +840,6 @@ namespace FEXCore::Context {
     uint64_t StartAddr {};
     uint64_t Length {};
 
-    // Do we already have this in the IR cache?
-    auto LocalEntry = Thread->LocalIRCache.find(GuestRIP);
-
-    if (LocalEntry != Thread->LocalIRCache.end()) {
-      // Entry already exists
-      // pull in the data
-      IRList = LocalEntry->second.IR.get();
-      DebugData = LocalEntry->second.DebugData.get();
-      RAData = LocalEntry->second.RAData.get();
-      StartAddr = LocalEntry->second.StartAddr;
-      Length = LocalEntry->second.Length;
-
-      GeneratedIR = false;
-    }
-
     {
       std::lock_guard<std::mutex> lk(AOTIRCacheLock);
       auto file = AddrToFile.lower_bound(GuestRIP);
@@ -873,10 +858,6 @@ namespace FEXCore::Context {
       if (file != AddrToFile.begin()) {
         --file;
         auto Mod = (decltype(AOTIRCache)::value_type::second_type) file->second.CachedFileEntry;
-
-        if (Mod == nullptr) {
-          file->second.CachedFileEntry = Mod = AOTIRCache[file->second.fileid];
-        }
 
         if (Mod != nullptr)
         {
@@ -906,6 +887,23 @@ namespace FEXCore::Context {
             //LogMan::Msg::I("AOTIR: Failed to find %lx, %lx, %s\n", GuestRIP, GuestRIP - file->second.Start + file->second.Offset, file->second.fileid.c_str());
           }
         }
+      }
+    }
+
+    if (IRList == nullptr) {
+      // Do we already have this in the IR cache?
+      auto LocalEntry = Thread->LocalIRCache.find(GuestRIP);
+
+      if (LocalEntry != Thread->LocalIRCache.end()) {
+        // Entry already exists
+        // pull in the data
+        IRList = LocalEntry->second.IR.get();
+        DebugData = LocalEntry->second.DebugData.get();
+        RAData = LocalEntry->second.RAData.get();
+        StartAddr = LocalEntry->second.StartAddr;
+        Length = LocalEntry->second.Length;
+
+        GeneratedIR = false;
       }
     }
 
@@ -1421,8 +1419,6 @@ namespace FEXCore::Context {
       fileid += Config.ABILocalFlags ? "L" : "l";
       fileid += Config.ABINoPF ? "p" : "P";
 
-      AddrToFile.insert({ Base, { Base, Size, Offset, fileid, filename, nullptr, false} });
-
       if (Config.AOTIRLoad && !AOTIRCache.contains(fileid) && AOTIRLoader) {
         auto streamfd = AOTIRLoader(fileid);
         if (streamfd != -1) {
@@ -1434,6 +1430,8 @@ namespace FEXCore::Context {
           close(streamfd);
         }
       }
+
+      AddrToFile.insert({ Base, { Base, Size, Offset, fileid, filename, AOTIRCache[fileid], false} });
     }
   }
 

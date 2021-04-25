@@ -963,7 +963,6 @@ namespace FEXCore::Context {
       CodeData = Thread->CPUBackend->CompileCode(GuestRIP, IRList, DebugData, RAData);
     }
 
-    *(uint64_t*)((char*)CodeData+2) = GuestRIP;
     // Attempt to get the CPU backend to compile this code
     return { CodeData, IRList, DebugData, RAData, GeneratedIR, StartAddr, Length};
   }
@@ -996,7 +995,7 @@ namespace FEXCore::Context {
     struct stat fileinfo;
     if (fstat(streamfd, &fileinfo) < 0)
       return false;
-    void *fileptr = mmap(nullptr, (fileinfo.st_size + 4095) & ~4095, PROT_READ | PROT_EXEC | PROT_WRITE, MAP_PRIVATE, streamfd, 0);
+    void *fileptr = mmap(nullptr, (fileinfo.st_size + 4095) & ~4095, PROT_READ | PROT_EXEC, MAP_SHARED, streamfd, 0);
 
     if (fileptr == MAP_FAILED)
       return false;

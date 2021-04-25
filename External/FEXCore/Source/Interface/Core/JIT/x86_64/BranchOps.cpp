@@ -90,6 +90,7 @@ DEF_OP(ExitFunction) {
     // L1 Cache
     mov(rcx, qword[r14 + offsetof(FEXCore::Core::CPUState, meta.L1Pointer)]);
     mov(rax, RipReg);
+    mov(rdx, RipReg);
 
     and_(rax, LookupCache::L1_ENTRIES_MASK);
     shl(rax, 4);

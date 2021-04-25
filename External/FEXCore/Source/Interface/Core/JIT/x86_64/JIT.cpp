@@ -609,8 +609,7 @@ void *X86JITCore::CompileCode(uint64_t Entry, [[maybe_unused]] FEXCore::IR::IRLi
     L(RunBlock);
   }
 
-  mov(rax, 0xABCDEFABCDEF);
-  mov(qword[r14 + offsetof(FEXCore::Core::CPUState, lastEntrypoint)], rax);
+  mov(qword[r14 + offsetof(FEXCore::Core::CPUState, lastEntrypoint)], rdx);
 
   LogMan::Throw::A(RAData != nullptr, "Needs RA");
 

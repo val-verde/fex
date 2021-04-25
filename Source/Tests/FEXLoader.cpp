@@ -32,6 +32,7 @@ $end_info$
 
 extern uint64_t SectionMaxAddress;
 extern std::set<uint64_t> ExternalBranches;
+extern bool CollectExternalBranches;
 
 namespace {
 static bool SilentLog;
@@ -335,6 +336,7 @@ int main(int argc, char **argv, char **const envp) {
   }
 
   if (AOTIRGenerate()) {
+    CollectExternalBranches = true;
     for(auto Section: Loader.Sections) {
       if (Section.Executable && Section.Size > 16) {
         ELFLoader::ELFContainer container{Section.Filename, "", false};

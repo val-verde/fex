@@ -32,8 +32,10 @@ namespace FEX::HLE::x32 {
 class x32SyscallHandler final : public FEX::HLE::SyscallHandler {
 public:
   x32SyscallHandler(FEXCore::Context::Context *ctx, FEX::HLE::SignalDelegator *_SignalDelegation, std::unique_ptr<MemAllocator> Allocator);
-
+  
   FEX::HLE::MemAllocator *GetAllocator() { return AllocHandler.get(); }
+  virtual void *GuestMmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+  virtual int GuestMunmap(void *addr, uint64_t length);
 
 private:
   void RegisterSyscallHandlers();

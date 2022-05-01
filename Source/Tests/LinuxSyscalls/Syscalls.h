@@ -164,6 +164,9 @@ public:
 
   FEX::HLE::MemAllocator *Get32BitAllocator() { return Alloc32Handler.get(); }
 
+  virtual void *GuestMmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) = 0;
+  virtual int GuestMunmap(void *addr, uint64_t length) = 0;
+
   void TrackMmap(uintptr_t Base, uintptr_t Size, int Prot, int Flags, int fd, off_t Offset);
   void TrackMunmap(uintptr_t Base, uintptr_t Size);
   void TrackMprotect(uintptr_t Base, uintptr_t Size, int Prot);

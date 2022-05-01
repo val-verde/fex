@@ -27,6 +27,9 @@ $end_info$
 #include <FEXCore/Utils/MathUtils.h>
 #include <FEXCore/Utils/Threads.h>
 #include <FEXHeaderUtils/Syscalls.h>
+#include <FEXHeaderUtils/ScopedSignalMask.h>
+#include <FEXHeaderUtils/TypeDefines.h>
+#include <Tests/LinuxSyscalls/SignalDelegator.h>
 
 #include <algorithm>
 #include <alloca.h>
@@ -44,6 +47,7 @@ $end_info$
 #include <sys/mman.h>
 #include <sys/utsname.h>
 #include <unistd.h>
+#include <sys/shm.h>
 
 namespace FEXCore::Context {
   struct Context;
@@ -586,6 +590,10 @@ SyscallHandler::SyscallHandler(FEXCore::Context::Context *_CTX, FEX::HLE::Signal
   HostKernelVersion = CalculateHostKernelVersion();
   GuestKernelVersion = CalculateGuestKernelVersion();
   Alloc32Handler = FEX::HLE::Create32BitAllocator();
+
+  if (SMCChecks == FEXCore::Config::CONFIG_SMC_MTRACK) {
+    SignalDelegation->RegisterHostSignalHandler(SIGSEGV, HandleSegfault, true);
+  }
 }
 
 SyscallHandler::~SyscallHandler() {
@@ -670,53 +678,662 @@ uint64_t UnimplementedSyscallSafe(FEXCore::Core::CpuStateFrame *Frame, uint64_t 
 }
 
 
-//// VMA Tracking ////
+//// VMA (Virtual Memory Area) Tracking ////
 static std::string get_fdpath(int fd)
 {
       std::error_code ec;
       return std::filesystem::canonical(std::filesystem::path("/proc/self/fd") / std::to_string(fd), ec).string();
 }
 
-void SyscallHandler::TrackMmap(uintptr_t Base, uintptr_t Size, int Prot, int Flags, int fd, off_t Offset) {
-  if (!(Flags & MAP_ANONYMOUS)) {
-    auto filename = get_fdpath(fd);
+bool SyscallHandler::HandleSegfault(FEXCore::Core::InternalThreadState *Thread, int Signal, void *info, void *ucontext) {
+  auto CTX = Thread->CTX;
 
-    FEXCore::Context::AddNamedRegion(CTX, Base, Size, Offset, filename);
+  auto FaultAddress = (uintptr_t)((siginfo_t*)info)->si_addr;
+
+  {
+    FHU::ScopedSignalMaskWithSharedLock lk(_SyscallHandler->VMATracking.Mutex);
+
+    // Get the first mapping after FaultAddress, or end
+    // FaultAddress is inclusive
+    // If the write spans two pages, they will be flushed one at a time (generating two faults)
+    auto Entry = _SyscallHandler->VMATracking.LookupVMAUnsafe(FaultAddress);
+
+    if (Entry != _SyscallHandler->VMATracking.VMAs.end()) {
+      if (Entry->second.Flags.Mutable.Writable) {
+
+        auto FaultBase = FEXCore::AlignDown(FaultAddress, FHU::FEX_PAGE_SIZE);
+
+        if (Entry->second.Flags.Immutable.Shared) {
+          LOGMAN_THROW_A_FMT(Entry->second.Resource, "VMA tracking error");
+
+          auto Offset = FaultBase - Entry->first + Entry->second.Offset;
+
+          auto VMA = Entry->second.Resource->FirstVMA;
+          LOGMAN_THROW_A_FMT(VMA, "VMA tracking error");
+
+          do
+          {
+            if (VMA->Offset <= Offset && (VMA->Offset + VMA->Length) > Offset) {
+              auto FaultMirrored = Offset - VMA->Offset + VMA->Base;
+              if (VMA->Flags.Mutable.Writable) {
+                auto rv = mprotect((void*)FaultMirrored, FHU::FEX_PAGE_SIZE, PROT_READ | PROT_WRITE);
+                LogMan::Throw::AFmt(rv == 0, "mprotect({}, {}) failed", FaultMirrored, FHU::FEX_PAGE_SIZE);
+              }
+              FEXCore::Context::InvalidateGuestCodeRange(CTX, FaultMirrored, FHU::FEX_PAGE_SIZE);
+            }
+          } while ((VMA = VMA->ResourceNextVMA));
+        } else {
+          // Mark as read write before flush, so that if code is compiled after the Flush but before returning, the segfault will be re-raised
+          auto rv = mprotect((void*)FaultBase, FHU::FEX_PAGE_SIZE, PROT_READ | PROT_WRITE);
+          LogMan::Throw::AFmt(rv == 0, "mprotect({}, {}) failed", FaultBase, FHU::FEX_PAGE_SIZE);
+          FEXCore::Context::InvalidateGuestCodeRange(CTX, FaultBase, FHU::FEX_PAGE_SIZE);
+        }
+        return true;
+      }
+    }
   }
-  if (SMCChecks == FEXCore::Config::CONFIG_SMC_MMAN) {
-    FEXCore::Context::InvalidateGuestCodeRange(CTX, (uintptr_t)Base, Size);
+
+  return false;
+}
+
+void SyscallHandler::MarkGuestExecutableRange(uint64_t Start, uint64_t Length) {
+  const auto Base = Start & FHU::FEX_PAGE_MASK;
+  const auto Top = FEXCore::AlignUp(Start + Length, FHU::FEX_PAGE_SIZE);
+
+  {
+    if (SMCChecks != FEXCore::Config::CONFIG_SMC_MTRACK) {
+      return;
+    }
+
+    FHU::ScopedSignalMaskWithSharedLock lk(VMATracking.Mutex);
+
+    // Find the first mapping at or after the range ends, or ::end().
+    // Top points to the address after the end of the range
+    auto Mapping = VMATracking.VMAs.lower_bound(Top);
+
+    while (Mapping != VMATracking.VMAs.begin()) {
+      Mapping--;
+
+      const auto MapBase = Mapping->first;
+      const auto MapTop = MapBase + Mapping->second.Length;
+
+      if (MapTop <= Base) {
+        // Mapping ends before the Range start, exit
+        break;
+      } else {
+        const auto ProtectBase = std::max(MapBase, Base);
+        const auto ProtectSize = std::min(MapTop, Top) - ProtectBase;
+
+        if (Mapping->second.Flags.Immutable.Shared) {
+          LOGMAN_THROW_A_FMT(Mapping->second.Resource, "VMA tracking error");
+
+          auto OffsetBase = ProtectBase - Mapping->first + Mapping->second.Offset;
+          auto OffsetTop = OffsetBase + ProtectSize;
+
+          auto VMA = Mapping->second.Resource->FirstVMA;
+          LOGMAN_THROW_A_FMT(VMA, "VMA tracking error");
+
+          do
+          {
+            auto VMAOffsetBase = VMA->Offset;
+            auto VMAOffsetTop = VMA->Offset + VMA->Length;
+            auto VMABase = VMA->Base;
+
+            if (VMA->Flags.Mutable.Writable && VMAOffsetBase < OffsetTop && VMAOffsetTop > OffsetBase) {
+
+              const auto MirroredBase = std::max(VMAOffsetBase, OffsetBase);
+              const auto MirroredSize = std::min(OffsetTop, VMAOffsetTop) - MirroredBase;
+
+              auto rv = mprotect((void*)(MirroredBase - VMAOffsetBase + VMABase), MirroredSize, PROT_READ);
+              LogMan::Throw::AFmt(rv == 0, "mprotect({}, {}) failed", MirroredBase, MirroredSize);
+            }
+          } while ((VMA = VMA->ResourceNextVMA));
+
+        } else if (Mapping->second.Flags.Mutable.Writable) {
+          int rv = mprotect((void*)ProtectBase, ProtectSize, PROT_READ);
+
+          LogMan::Throw::AFmt(rv == 0, "mprotect({}, {}) failed", ProtectBase, ProtectSize);
+        }
+      }
+    }
   }
 }
 
-void SyscallHandler::TrackMunmap(uintptr_t Base, uintptr_t Size) {  
-  if (SMCChecks == FEXCore::Config::CONFIG_SMC_MMAN) {
-    FEXCore::Context::InvalidateGuestCodeRange(CTX, (uintptr_t)Base, Size);
+SyscallHandler::VMATracking::VMAsType::const_iterator SyscallHandler::VMATracking::LookupVMAUnsafe(uint64_t GuestAddr) const {
+  auto Entry = VMAs.upper_bound(GuestAddr);
+
+  if (Entry != VMAs.begin()) {
+    --Entry;
+
+    if (Entry->first <= GuestAddr && (Entry->first + Entry->second.Length) > GuestAddr) {
+     return Entry;
+    }
   }
+
+  return VMAs.end();
+}
+
+// XXX this is preliminary and will get rechecked & cleaned up
+void SyscallHandler::VMATracking::SetUnsafe(FEXCore::Context::Context *CTX, MappedResource *MappedResource, uintptr_t Base, uintptr_t Offset, uintptr_t Length, VMAFlags Flags) {
+  ClearUnsafe(CTX, Base, Length, MappedResource);
+
+  auto VMAInserted = VMAs.emplace(Base, VMAEntry{ MappedResource, nullptr, MappedResource ? MappedResource->FirstVMA : nullptr, Base, Offset, Length, Flags });
+  LOGMAN_THROW_A_FMT(VMAInserted.second == true, "VMA Tracking corruption");
+
+  if (MappedResource) {
+    // Insert to the front of the linked list
+    ListPrepend(MappedResource, &VMAInserted.first->second);
+  
+    MappedResource->FirstVMA = &VMAInserted.first->second;
+  }
+}
+
+inline void SyscallHandler::VMATracking::LinkCheck(VMAEntry *VMA) {
+  if (VMA) {
+    LOGMAN_THROW_A_FMT(VMA->ResourceNextVMA != VMA, "VMA tracking error");
+    LOGMAN_THROW_A_FMT(VMA->ResourcePrevVMA != VMA, "VMA tracking error");
+  }
+}
+// Removes a VMA from corresponding MappedResource list
+// Returns true if list is empty
+bool SyscallHandler::VMATracking::ListRemove(VMAEntry *VMA) {
+  LOGMAN_THROW_A_FMT(VMA->Resource != nullptr, "VMA tracking error");
+  
+  // if it has prev, make prev to next
+  if (VMA->ResourcePrevVMA) {
+    LOGMAN_THROW_A_FMT(VMA->ResourcePrevVMA->ResourceNextVMA == VMA, "VMA tracking error");
+    VMA->ResourcePrevVMA->ResourceNextVMA = VMA->ResourceNextVMA;
+  } else {
+    LOGMAN_THROW_A_FMT(VMA->Resource->FirstVMA == VMA, "VMA tracking error");
+  }
+
+  // if it has next, make next to prev
+  if (VMA->ResourceNextVMA) {
+    LOGMAN_THROW_A_FMT(VMA->ResourceNextVMA->ResourcePrevVMA == VMA, "VMA tracking error");
+    VMA->ResourceNextVMA->ResourcePrevVMA = VMA->ResourcePrevVMA;
+  }
+
+  // If it is the first in the list, make Next the first in the list
+  if (VMA->Resource && VMA->Resource->FirstVMA == VMA) {
+    LOGMAN_THROW_A_FMT(!VMA->ResourceNextVMA || VMA->ResourceNextVMA->ResourcePrevVMA == nullptr, "VMA tracking error");
+    
+    VMA->Resource->FirstVMA = VMA->ResourceNextVMA;
+  }
+
+  LinkCheck(VMA);
+  LinkCheck(VMA->ResourceNextVMA);
+  LinkCheck(VMA->ResourcePrevVMA);
+
+  // Return true if list is empty
+  return VMA->Resource->FirstVMA == nullptr;
+}
+
+// Replaces a VMA in corresponding MappedResource list
+// Requires NewVMA->Resource, NewVMA->ResourcePrevVMA and NewVMA->ResourceNextVMA to be already setup
+void SyscallHandler::VMATracking::ListReplace(VMAEntry* VMA, VMAEntry* NewVMA) {
+  LOGMAN_THROW_A_FMT(VMA->Resource != nullptr, "VMA tracking error");
+
+  LOGMAN_THROW_A_FMT(VMA->Resource == NewVMA->Resource, "VMA tracking error");
+  LOGMAN_THROW_A_FMT(NewVMA->ResourcePrevVMA == VMA->ResourcePrevVMA, "VMA tracking error");
+  LOGMAN_THROW_A_FMT(NewVMA->ResourceNextVMA == VMA->ResourceNextVMA, "VMA tracking error");
+
+  if (VMA->ResourcePrevVMA) {
+    LOGMAN_THROW_A_FMT(VMA->Resource->FirstVMA != VMA, "VMA tracking error");
+    LOGMAN_THROW_A_FMT(VMA->ResourcePrevVMA->ResourceNextVMA == VMA, "VMA tracking error");
+    VMA->ResourcePrevVMA->ResourceNextVMA = NewVMA;
+  } else {
+    LOGMAN_THROW_A_FMT(VMA->Resource->FirstVMA == VMA, "VMA tracking error");
+    VMA->Resource->FirstVMA = NewVMA;
+  }
+
+  if (VMA->ResourceNextVMA) {
+    LOGMAN_THROW_A_FMT(VMA->ResourceNextVMA->ResourcePrevVMA == VMA, "VMA tracking error");
+    VMA->ResourceNextVMA->ResourcePrevVMA = NewVMA;
+  }
+
+  LinkCheck(VMA);
+  LinkCheck(NewVMA);
+  LinkCheck(VMA->ResourceNextVMA);
+  LinkCheck(VMA->ResourcePrevVMA);
+}
+
+// Inserts a VMA in corresponding MappedResource list
+// Requires NewVMA->Resource, NewVMA->ResourcePrevVMA and NewVMA->ResourceNextVMA to be already setup
+void SyscallHandler::VMATracking::ListInsert(VMAEntry* AfterVMA, VMAEntry* NewVMA) {
+  LOGMAN_THROW_A_FMT(NewVMA->Resource != nullptr, "VMA tracking error");
+
+  LOGMAN_THROW_A_FMT(AfterVMA->Resource == NewVMA->Resource, "VMA tracking error");
+  LOGMAN_THROW_A_FMT(NewVMA->ResourcePrevVMA == AfterVMA, "VMA tracking error");
+  LOGMAN_THROW_A_FMT(NewVMA->ResourceNextVMA == AfterVMA->ResourceNextVMA, "VMA tracking error");
+
+  if (AfterVMA->ResourceNextVMA) {
+    LOGMAN_THROW_A_FMT(AfterVMA->ResourceNextVMA->ResourcePrevVMA == AfterVMA, "VMA tracking error");
+    AfterVMA->ResourceNextVMA->ResourcePrevVMA = NewVMA;
+  }
+  AfterVMA->ResourceNextVMA = NewVMA;
+
+  LinkCheck(AfterVMA);
+  LinkCheck(NewVMA);
+  LinkCheck(AfterVMA->ResourceNextVMA);
+  LinkCheck(AfterVMA->ResourcePrevVMA);
+}
+
+// Prepends a VMA 
+// Requires NewVMA->Resource, NewVMA->ResourcePrevVMA and NewVMA->ResourceNextVMA to be already setup
+void SyscallHandler::VMATracking::ListPrepend(MappedResource* Resource, VMAEntry* NewVMA) {
+  LOGMAN_THROW_A_FMT(Resource != nullptr, "VMA tracking error");
+
+  LOGMAN_THROW_A_FMT(NewVMA->Resource == Resource, "VMA tracking error");
+  LOGMAN_THROW_A_FMT(NewVMA->ResourcePrevVMA == nullptr, "VMA tracking error");
+  LOGMAN_THROW_A_FMT(NewVMA->ResourceNextVMA == Resource->FirstVMA, "VMA tracking error");
+
+  if (Resource->FirstVMA) {
+    LOGMAN_THROW_A_FMT(Resource->FirstVMA->ResourcePrevVMA == nullptr, "VMA tracking error");
+    Resource->FirstVMA->ResourcePrevVMA = NewVMA;
+  }
+
+  Resource->FirstVMA = NewVMA;
+
+  LinkCheck(NewVMA);
+  LinkCheck(NewVMA->ResourceNextVMA);
+  LinkCheck(NewVMA->ResourcePrevVMA);
+}
+
+// XXX this is preliminary and will get rechecked & cleaned up
+void SyscallHandler::VMATracking::ClearUnsafe(FEXCore::Context::Context *CTX, uintptr_t Base, uintptr_t Length, MappedResource *PreservedMappedResource) {
+  const auto Top = Base + Length;
+
+  // find the first Mapping at or after the Range ends, or ::end()
+  // Top is the address after the end
+  auto MappingIter = VMAs.lower_bound(Top);
+
+  // Iterate backwards all mappings
+  while (MappingIter != VMAs.begin()) {
+    MappingIter--;
+
+    const auto Mapping = &MappingIter->second;
+    const auto MapBase = MappingIter->first;
+    const auto MapTop = MapBase + Mapping->Length;
+
+    if (MapTop <= Base) {
+      // Mapping ends before the Range start, exit
+      break;
+    } else if (MapBase < Base && MapTop <= Top) {
+      // Mapping starts before Range & ends at or before Range, trim end
+      Mapping->Length = Base - MapBase;
+    } else if (MapBase < Base && MapTop > Top) {
+      // Mapping starts before Range & ends after Range, split
+
+      // trim first half
+      Mapping->Length = Base - MapBase;
+
+      // insert second half, link it after Mapping
+      auto NewOffset = Mapping->Offset + MapBase + Length;
+      auto NewLength = MapTop - Top;
+
+      auto Inserted = VMAs.emplace(Top, VMAEntry{ Mapping->Resource, Mapping, Mapping->ResourceNextVMA, Top, NewOffset, NewLength, Mapping->Flags });
+      LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
+      if (Mapping->Resource) {
+        ListInsert(Mapping, &Inserted.first->second);
+      }
+    } else if (MapBase >= Base && MapTop <= Top) {
+      // Mapping is included or equal to Range, delete
+      // returns next element, so -- is safe at loop
+
+      // If linked to a Mapped Resource, remove from linked list and possibly delete the Mapped Resource
+      if (Mapping->Resource) {
+        if (ListRemove(Mapping) && Mapping->Resource != PreservedMappedResource) {
+          if (Mapping->Resource->AOTIRCacheEntry) {
+            FEXCore::Context::UnloadAOTIRCacheEntry(CTX, Mapping->Resource->AOTIRCacheEntry);
+          }
+          MappedResources.erase(Mapping->Resource->Iterator);
+        }
+      }
+      
+      // remove
+      MappingIter = VMAs.erase(MappingIter);
+    } else if (MapBase >= Base && MapTop > Top) {
+      // Mapping starts after or at Range && ends after Range, trim start
+
+      auto NewOffset = Mapping->Offset + MapBase + Length;
+      auto NewLength = MapTop - Top;
+      // insert second half
+      // Link it as a replacement to Mapping
+      auto Inserted = VMAs.emplace(Top, VMAEntry{ Mapping->Resource, Mapping->ResourcePrevVMA, Mapping->ResourceNextVMA, Top, NewOffset, NewLength, Mapping->Flags });
+      LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
+
+      // If linked to a Mapped Resource, remove from linked list
+      if (Mapping->Resource) {
+        ListReplace(Mapping, &Inserted.first->second);
+      }
+
+      // erase original
+      // returns next element, so it can be decremented safely in the next loop iteration
+      MappingIter = VMAs.erase(MappingIter);
+    } else {
+      ERROR_AND_DIE_FMT("Invalid Case");
+    }
+  }
+}
+
+// XXX this is preliminary and will get rechecked & cleaned up
+void SyscallHandler::VMATracking::ChangeUnsafe(uintptr_t Base, uintptr_t Length, VMAFlags Flags) {
+  const auto Top = Base + Length;
+
+  // find the first Mapping at or after the Range ends, or ::end()
+  // Top is the address after the end
+  auto MappingIter = VMAs.lower_bound(Top);
+
+  // Iterate backwards all mappings
+  while (MappingIter != VMAs.begin()) {
+    MappingIter--;
+
+    const auto Mapping = &MappingIter->second;
+    const auto MapBase = MappingIter->first;
+    const auto MapTop = MapBase + Mapping->Length;
+
+    if (MapTop <= Base) {
+      // Mapping ends before the Range start, exit
+      break;
+    } else if (Mapping->Flags.Mutable == Flags.Mutable) {
+      continue;
+    } else if (MapBase < Base && MapTop <= Top) {
+      // Mapping starts before Range & ends at or before Range, split second half
+      
+      // Trim end of original mapping
+      Mapping->Length = Base - MapBase;
+
+      // Make new VMA with new flags, insert remaining of the original mapping
+      auto NewOffset = Mapping->Offset + Mapping->Length;
+      auto NewLength = Top - Base;
+      auto NewFlags = Mapping->Flags;
+      NewFlags.Mutable = Flags.Mutable;
+
+      auto Inserted = VMAs.emplace(Base, VMAEntry{ Mapping->Resource, Mapping, Mapping->ResourceNextVMA, Base, NewOffset, NewLength, NewFlags });
+      LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
+      if (Mapping->Resource) {
+        ListInsert(Mapping, &Inserted.first->second);
+      }
+    } else if (MapBase < Base && MapTop > Top) {
+      // Mapping starts before Range & ends after Range, split twice
+
+      // Trim end of original mapping
+      Mapping->Length = Base - MapBase;
+
+      // Make new VMA with new flags, insert for length of mapping
+      auto NewOffset1 = Mapping->Offset + Mapping->Length;
+      auto NewLength1 = Top - Base;
+      auto NewFlags1 = Mapping->Flags;
+      NewFlags1.Mutable = Flags.Mutable;
+
+      auto Inserted1 = VMAs.emplace(Base, VMAEntry{ Mapping->Resource, Mapping, Mapping->ResourceNextVMA, Base, NewOffset1, NewLength1, NewFlags1 });
+      LOGMAN_THROW_A_FMT(Inserted1.second, "VMA tracking error");
+      auto Mapping1 = &Inserted1.first->second;
+
+      if (Mapping->Resource) {
+        ListInsert(Mapping, Mapping1);
+      }
+
+      // Insert the rest of the mapping with original flags
+
+      // Make new VMA with new flags, insert for length of mapping
+      auto NewOffset2 = Mapping1->Offset + Mapping1->Length;
+      auto NewLength2 = MapTop - Top;
+
+      auto Inserted2 = VMAs.emplace(Top, VMAEntry{ Mapping->Resource, Mapping1, Mapping1->ResourceNextVMA, Top, NewOffset2, NewLength2, Mapping->Flags });
+      LOGMAN_THROW_A_FMT(Inserted2.second, "VMA tracking error");
+      if (Mapping->Resource) {
+        ListInsert(Mapping1, &Inserted2.first->second);
+      }
+    } else if (MapBase >= Base && MapTop <= Top) {
+      // Mapping fully contained
+      // Just update flags
+
+      Mapping->Flags.Mutable = Flags.Mutable;
+    } else if (MapBase >= Base && MapTop > Top) {
+      // Mapping starts after or at Range && ends after Range
+
+      auto MapFlags = Mapping->Flags;
+
+      // Trim start, update flags
+      Mapping->Length = Top - MapBase;
+      Mapping->Flags.Mutable = Flags.Mutable;
+
+      auto NewOffset = Mapping->Offset + Mapping->Length;
+      auto NewLength = MapTop - Top;
+
+      // insert second part with original flags
+      // Link it as a replacement to Mapping
+      auto Inserted = VMAs.emplace(Top, VMAEntry{ Mapping->Resource, Mapping, Mapping->ResourceNextVMA, Top, NewOffset, NewLength, MapFlags });
+      LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
+      if (Mapping->Resource) {
+        ListInsert(Mapping, &Inserted.first->second);
+      }
+    } else {
+      ERROR_AND_DIE_FMT("Invalid Case");
+    }
+  }
+}
+
+// This matches the peculiarities algorithm used in linux ksys_shmdt (linux kernel 5.16, ipc/shm.c)
+uintptr_t SyscallHandler::VMATracking::ClearShmUnsafe(FEXCore::Context::Context *CTX, uintptr_t Base) {
+  auto Entry = VMAs.upper_bound(Base);
+
+  if (Entry != VMAs.begin()) {
+    --Entry;
+
+    do {
+      if (Entry->second.Base - Base == Entry->second.Offset && 
+        Entry->second.Resource &&
+        Entry->second.Resource->Iterator->first.dev == MRID_SHM) {
+          
+          const auto ShmLength = Entry->second.Resource->Iterator->second.Length;
+          const auto Resource = Entry->second.Resource;
+
+          do {
+            if (Entry->second.Resource == Resource) {
+              if (ListRemove(&Entry->second)) {
+                if (Entry->second.Resource->AOTIRCacheEntry) {
+                  FEXCore::Context::UnloadAOTIRCacheEntry(CTX, Entry->second.Resource->AOTIRCacheEntry);
+                }
+                MappedResources.erase(Entry->second.Resource->Iterator);
+              }
+              Entry = VMAs.erase(Entry);
+            } else {
+              Entry++;
+            }
+            
+          } while (Entry != VMAs.end() && (Entry->second.Base + Entry->second.Length - Base) <= ShmLength);
+
+          return ShmLength;
+        }
+    } while (++Entry != VMAs.end());
+  }
+
+  return 0;
+}
+
+FEXCore::HLE::AOTIRCacheEntryLookupResult SyscallHandler::LookupAOTIRCacheEntry(uint64_t GuestAddr) {
+  FHU::ScopedSignalMaskWithSharedLock lk(_SyscallHandler->VMATracking.Mutex);
+  auto rv = FEXCore::HLE::AOTIRCacheEntryLookupResult(nullptr, 0, std::move(lk));
+
+  // Get the first mapping after FaultAddress, or end
+  // FaultAddress is inclusive
+  // If the write spans two pages, they will be flushed one at a time (generating two faults)
+  auto Entry = _SyscallHandler->VMATracking.LookupVMAUnsafe(GuestAddr);
+
+  if (Entry != _SyscallHandler->VMATracking.VMAs.end()) {
+    rv.Entry = Entry->second.Resource ? Entry->second.Resource->AOTIRCacheEntry : nullptr;
+    rv.Offset = Entry->second.Base - Entry->second.Offset;
+  }
+
+  return rv;
+}
+
+void SyscallHandler::TrackMmap(uintptr_t Base, uintptr_t Size, int Prot, int Flags, int fd, off_t Offset) {
+  {
+    FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
+
+    static uint64_t AnonSharedId = 1;
+
+    MappedResource *Resource = nullptr;
+    
+    
+    if (!(Flags & MAP_ANONYMOUS)) {
+      struct stat64 buf;
+      fstat64(fd, &buf);
+      MRID mrid {buf.st_dev, buf.st_ino};
+
+      auto ResourceInserted = VMATracking.MappedResources.insert({mrid, {nullptr, nullptr, 0}});
+      Resource = &ResourceInserted.first->second;
+
+      if (ResourceInserted.second) {
+        auto filename = get_fdpath(fd);
+        Resource->AOTIRCacheEntry = FEXCore::Context::LoadAOTIRCacheEntry(CTX, filename);
+        Resource->Iterator = ResourceInserted.first;
+      }
+      
+    } else if (Flags & MAP_SHARED) {
+      MRID mrid {MRID_ANON, AnonSharedId++};
+      
+      auto ResourceInserted = VMATracking.MappedResources.insert({mrid, {nullptr, nullptr, 0}});
+      LOGMAN_THROW_A_FMT(ResourceInserted.second, "VMA tracking error");
+      Resource = &ResourceInserted.first->second;
+      Resource->Iterator = ResourceInserted.first;
+    } else {
+      Resource = nullptr;
+    }
+
+    VMATracking.SetUnsafe(CTX, Resource, Base, Offset, Size, VMAFlags {Prot & PROT_WRITE, Flags & MAP_SHARED});
+  }
+
+  FEXCore::Context::InvalidateGuestCodeRange(CTX, (uintptr_t)Base, Size);
+}
+
+void SyscallHandler::TrackMunmap(uintptr_t Base, uintptr_t Size) {
+  {
+    FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
+
+    VMATracking.ClearUnsafe(CTX, Base, Size);
+  }
+  
+  FEXCore::Context::InvalidateGuestCodeRange(CTX, (uintptr_t)Base, Size);
 }
 
 void SyscallHandler::TrackMprotect(uintptr_t Base, uintptr_t Size, int Prot) {
-  if (SMCChecks == FEXCore::Config::CONFIG_SMC_MMAN && Prot & PROT_EXEC) {
-    FEXCore::Context::InvalidateGuestCodeRange(CTX, (uintptr_t)Base, Size);
+  {
+    FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
+
+    VMATracking.ChangeUnsafe(Base, Size, VMAFlags { Prot & PROT_WRITE, false});
+  }
+  
+  if (Prot & PROT_EXEC) {
+    FEXCore::Context::InvalidateGuestCodeRange(CTX, Base, Size);
   }
 }
 
 void SyscallHandler::TrackMremap(uintptr_t OldAddress, size_t OldSize, size_t NewSize, int flags, uintptr_t NewAddress) {
-  if (SMCChecks == FEXCore::Config::CONFIG_SMC_MMAN) {
+  {
+
+    FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
+
+    auto OldVMA = VMATracking.LookupVMAUnsafe(OldAddress);
+
+    auto OldResource = OldVMA->second.Resource;
+    auto OldOffset = OldVMA->second.Offset + OldAddress - OldVMA->first;
+    auto OldFlags = OldVMA->second.Flags;
+
+    LOGMAN_THROW_A_FMT(OldVMA != VMATracking.VMAs.end(), "VMA Tracking corruption");
+
+    if (OldSize == 0) {
+      // Mirror existing mapping
+      // must be a shared mapping
+      LOGMAN_THROW_A_FMT(OldResource != nullptr, "VMA Tracking error");
+      LOGMAN_THROW_A_FMT(OldFlags.Immutable.Shared, "VMA Tracking error");
+      VMATracking.SetUnsafe(CTX, OldResource, NewAddress, OldOffset, NewSize, OldFlags);
+    } else {
+    
+      // MREMAP_DONTUNMAP is kernel 5.7+
+      #ifdef MREMAP_DONTUNMAP
+      if (!(flags & MREMAP_DONTUNMAP)) 
+      #endif
+      {
+        VMATracking.ClearUnsafe(CTX, OldAddress, OldSize, OldResource);
+      }
+
+      // Make anonymous mapping
+      VMATracking.SetUnsafe(CTX, OldResource, NewAddress, OldOffset, NewSize, OldFlags);
+    }
+  }
+
+  if (OldAddress != NewAddress) {
+    if (OldSize != 0) {
+       // This also handles the MREMAP_DONTUNMAP case
     FEXCore::Context::InvalidateGuestCodeRange(CTX, OldAddress, OldSize);
-    FEXCore::Context::InvalidateGuestCodeRange(CTX, NewAddress, NewSize);
+     }
+  } else {
+    // If mapping shrunk, Flush the unmapped region
+    if (OldSize > NewSize) {
+      FEXCore::Context::InvalidateGuestCodeRange(CTX, OldAddress + NewSize, OldSize - NewSize);
+    }
   }
 }
 
 void SyscallHandler::TrackShmat(int shmid, uintptr_t Base, int shmflg) {
-  // TODO
+  shmid_ds stat;
+
+  auto res = shmctl(shmid, IPC_STAT, &stat);
+  LOGMAN_THROW_A_FMT(res != -1, "shmctl IPC_STAT failed");
+
+  uint64_t Length = stat.shm_segsz;
+
+  {
+    FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
+    
+    // TODO
+    MRID mrid { MRID_SHM, static_cast<uint64_t>(shmid) };
+
+    auto ResourceInserted = VMATracking.MappedResources.insert({mrid, {nullptr, nullptr, Length}});
+    auto Resource = &ResourceInserted.first->second;
+    if (ResourceInserted.second) {
+      Resource->Iterator = ResourceInserted.first;
+    }
+    VMATracking.SetUnsafe(CTX, Resource, Base, 0, Length, VMAFlags {!(shmflg & SHM_RDONLY), true});
+  }
+
+  FEXCore::Context::InvalidateGuestCodeRange(CTX, Base, Length);
 }
 
 void SyscallHandler::TrackShmdt(uintptr_t Base) {
-  // TODO
+  FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
+
+  auto Length = VMATracking.ClearShmUnsafe(CTX, Base);
+  
+  // This might over flush if the shm has holes in it
+  FEXCore::Context::InvalidateGuestCodeRange(CTX, Base, Length);
 }
 
 void SyscallHandler::TrackMadvise(uintptr_t Base, uintptr_t Size, int advice) {
+  FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
   // TODO
+}
+
+void SyscallHandler::LockBeforeFork() {
+  FM.GetFDLock()->lock();
+
+  // XXX shared_mutex has issues with locking and forks
+  // VMATracking.Mutex.lock();
+
+  // Add other mutexes here
+}
+
+void SyscallHandler::UnlockAfterFork() {
+  // Add other mutexes here
+
+  // XXX shared_mutex has issues with locking and forks
+  // VMATracking.Mutex.unlock();
+  
+  FM.GetFDLock()->unlock(); 
 }
 
 }

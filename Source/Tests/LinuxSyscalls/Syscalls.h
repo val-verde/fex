@@ -16,11 +16,14 @@ $end_info$
 #include <FEXCore/Utils/CompilerDefs.h>
 
 #include <mutex>
+#include <shared_mutex>
 
 #include <errno.h>
 #include <stdint.h>
 #include <type_traits>
 #include <vector>
+#include <list>
+#include <map>
 #ifdef _M_X86_64
 #define SYSCALL_ARCH_NAME x64
 #elif _M_ARM_64
@@ -167,6 +170,7 @@ public:
   virtual void *GuestMmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) = 0;
   virtual int GuestMunmap(void *addr, uint64_t length) = 0;
 
+  ///// Memory Manager tracking /////
   void TrackMmap(uintptr_t Base, uintptr_t Size, int Prot, int Flags, int fd, off_t Offset);
   void TrackMunmap(uintptr_t Base, uintptr_t Size);
   void TrackMprotect(uintptr_t Base, uintptr_t Size, int Prot);
@@ -174,6 +178,14 @@ public:
   void TrackShmat(int shmid, uintptr_t Base, int shmflg);
   void TrackShmdt(uintptr_t Base);
   void TrackMadvise(uintptr_t Base, uintptr_t Size, int advice);
+  
+  ///// VMA (Virtual Memory Area) tracking /////
+  static bool HandleSegfault(FEXCore::Core::InternalThreadState *Thread, int Signal, void *info, void *ucontext);
+  virtual void MarkGuestExecutableRange(uint64_t Start, uint64_t Length) override;
+
+  ///// FORK tracking /////
+  void LockBeforeFork();
+  void UnlockAfterFork();
   
 protected:
   SyscallHandler(FEXCore::Context::Context *_CTX, FEX::HLE::SignalDelegator *_SignalDelegation);
@@ -206,6 +218,94 @@ private:
   #endif
 
   std::unique_ptr<FEX::HLE::MemAllocator> Alloc32Handler{};
+  
+  ///// VMA (Virtual Memory Area) tracking /////
+
+  FEXCore::HLE::AOTIRCacheEntryLookupResult LookupAOTIRCacheEntry(uint64_t GuestAddr) final override;
+
+
+  struct MRID {
+    uint64_t dev; /* kernel only uses lower 32-bits of dev_t */
+    uint64_t id;
+
+    bool operator<(const MRID& other) const {
+      return std::tie(dev, id) < std::tie(other.dev, other.id);
+    }
+  };
+
+  // We use bits 63:32 for our own custom dev tracking
+  static constexpr const uint64_t MRID_PRIVATE = 0x1'0000'0000ULL;
+  static constexpr const uint64_t MRID_ANON = 0x2'0000'0000ULL;
+  static constexpr const uint64_t MRID_SHM =  0x3'0000'0000ULL;
+
+  struct VMAEntry;
+
+  struct MappedResource {
+    typedef std::map<MRID, MappedResource> ContainerType;
+
+    FEXCore::IR::AOTIRCacheEntry *AOTIRCacheEntry;
+    VMAEntry *FirstVMA;
+    uint64_t Length; // 0 if not fixed size
+    ContainerType::iterator Iterator;
+  };
+
+  struct VMAFlags {
+    VMAFlags(int Writable, const int Shared) : Mutable {Writable != 0}, Immutable {Shared != 0} { }
+    struct Mutable {
+      bool Writable: 1;
+      bool operator==(const Mutable& other) const {
+        return other.Writable == Writable;
+      }
+    } Mutable;
+
+    const struct {
+      bool Shared: 1;
+    } Immutable;
+  };
+
+  struct VMAEntry {
+    MappedResource* Resource;
+    VMAEntry* ResourcePrevVMA;
+    VMAEntry* ResourceNextVMA;
+
+    uint64_t Base;
+    uint64_t Offset;
+    uint64_t Length;
+
+    VMAFlags Flags;
+  };
+
+  struct VMATracking {
+    using VMAEntry = SyscallHandler::VMAEntry;
+    std::shared_mutex Mutex{};
+    
+    // Memory ranges indexed by page aligned starting address
+    typedef std::map<uint64_t, VMAEntry> VMAsType;
+    VMAsType VMAs;
+    MappedResource::ContainerType MappedResources;
+
+    // Mutex must be at least shared_locked before calling
+    VMAsType::const_iterator LookupVMAUnsafe(uint64_t GuestAddr) const;
+
+    // Mutex must be unique_locked before calling
+    void SetUnsafe(FEXCore::Context::Context *Ctx, MappedResource *MappedResource, uintptr_t Base, uintptr_t Offset, uintptr_t Length, VMAFlags Flags);
+    
+    // Mutex must be unique_locked before calling
+    void ClearUnsafe(FEXCore::Context::Context *Ctx, uintptr_t Base, uintptr_t Length, MappedResource *PreservedMappedResource = nullptr);
+
+    // Mutex must be unique_locked before calling
+    void ChangeUnsafe(uintptr_t Base, uintptr_t Length, VMAFlags Flags);
+
+    // Mutex must be unique_locked before calling
+    // Returns the Size fo the Shm or 0 if not found
+    uintptr_t ClearShmUnsafe(FEXCore::Context::Context *Ctx, uintptr_t Base);
+  private:
+    bool ListRemove(VMAEntry *Mapping);
+    void ListReplace(VMAEntry *Mapping, VMAEntry *NewMapping);
+    void ListInsert(VMAEntry *AfterMapping, VMAEntry *NewMapping);
+    void ListPrepend(MappedResource *Resource, VMAEntry *NewVMA);
+    static void LinkCheck(VMAEntry *VMA);
+  } VMATracking;
 };
 
 uint64_t HandleSyscall(SyscallHandler *Handler, FEXCore::Core::CpuStateFrame *Frame, FEXCore::HLE::SyscallArguments *Args);

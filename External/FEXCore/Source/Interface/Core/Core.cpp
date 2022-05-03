@@ -550,6 +550,16 @@ namespace FEXCore::Context {
       Thread->ThreadManager.TID = ++ThreadID;
     }
 
+    auto FrameWithGuard = mmap(0, sizeof(FEXCore::Core::CpuStateFrame) + 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    LOGMAN_THROW_A_FMT(FrameWithGuard != MAP_FAILED, "Failed to allocate thread context");
+
+    auto ok = mprotect(FrameWithGuard, 4096, PROT_NONE);
+    LOGMAN_THROW_A_FMT(ok == 0, "Failed to allocate thread context");
+
+    Thread->CurrentFrame = reinterpret_cast<FEXCore::Core::CpuStateFrame*>(
+      4096 + reinterpret_cast<uintptr_t>(FrameWithGuard)
+    );
+
     // Copy over the new thread state to the new object
     memcpy(Thread->CurrentFrame, NewThreadState, sizeof(FEXCore::Core::CPUState));
     Thread->CurrentFrame->Thread = Thread;
@@ -579,6 +589,11 @@ namespace FEXCore::Context {
       // To be able to delete a thread from itself, we need to detached the std::thread object
       Thread->ExecutionThread->detach();
     }
+    
+    auto FrameWithGuard = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(Thread->CurrentFrame) - 4096);
+    auto ok = munmap(FrameWithGuard, sizeof(FEXCore::Core::CpuStateFrame) + 4096);
+    LOGMAN_THROW_A_FMT(ok == 0, "Failed to free thread");
+
     delete Thread;
   }
 

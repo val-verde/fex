@@ -249,18 +249,21 @@ private:
     ContainerType::iterator Iterator;
   };
 
-  struct VMAFlags {
-    VMAFlags(int Writable, const int Shared) : Mutable {Writable != 0}, Immutable {Shared != 0} { }
-    struct Mutable {
-      bool Writable: 1;
-      bool operator==(const Mutable& other) const {
-        return other.Writable == Writable;
-      }
-    } Mutable;
+  struct VMAProt {
+    bool Writable: 1;
+    bool operator==(const VMAProt& other) const {
+      return other.Writable == Writable;
+    }
+  };
+
+  struct VMAOptions {
+    VMAOptions(int Writable, const int Shared) : Prot {Writable != 0}, Flags {Shared != 0} { }
+
+    VMAProt Prot;
 
     const struct {
       bool Shared: 1;
-    } Immutable;
+    } Flags;
   };
 
   struct VMAEntry {
@@ -272,7 +275,7 @@ private:
     uint64_t Offset;
     uint64_t Length;
 
-    VMAFlags Flags;
+    VMAOptions Flags;
   };
 
   struct VMATracking {
@@ -288,13 +291,13 @@ private:
     VMAsType::const_iterator LookupVMAUnsafe(uint64_t GuestAddr) const;
 
     // Mutex must be unique_locked before calling
-    void SetUnsafe(FEXCore::Context::Context *Ctx, MappedResource *MappedResource, uintptr_t Base, uintptr_t Offset, uintptr_t Length, VMAFlags Flags);
+    void SetUnsafe(FEXCore::Context::Context *Ctx, MappedResource *MappedResource, uintptr_t Base, uintptr_t Offset, uintptr_t Length, VMAOptions Flags);
     
     // Mutex must be unique_locked before calling
     void ClearUnsafe(FEXCore::Context::Context *Ctx, uintptr_t Base, uintptr_t Length, MappedResource *PreservedMappedResource = nullptr);
 
     // Mutex must be unique_locked before calling
-    void ChangeUnsafe(uintptr_t Base, uintptr_t Length, VMAFlags Flags);
+    void ChangeUnsafe(uintptr_t Base, uintptr_t Length, VMAProt Prot);
 
     // Mutex must be unique_locked before calling
     // Returns the Size fo the Shm or 0 if not found
@@ -304,7 +307,7 @@ private:
     void ListReplace(VMAEntry *Mapping, VMAEntry *NewMapping);
     void ListInsert(VMAEntry *AfterMapping, VMAEntry *NewMapping);
     void ListPrepend(MappedResource *Resource, VMAEntry *NewVMA);
-    static void LinkCheck(VMAEntry *VMA);
+    static void ListCheckVMALinks(VMAEntry *VMA);
   } VMATracking;
 };
 

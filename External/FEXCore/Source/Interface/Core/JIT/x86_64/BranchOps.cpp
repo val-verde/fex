@@ -281,6 +281,11 @@ DEF_OP(RemoveCodeEntry) {
     pop(RA64[i - 1]);
 }
 
+DEF_OP(DeferredSignalCheck) {
+  mov(rax, IROp->C<IR::IROp_DeferredSignalCheck>()->BlockRIP);
+  mov(byte[STATE-1], 0);
+}
+
 DEF_OP(CPUID) {
   auto Op = IROp->C<IR::IROp_CPUID>();
 
@@ -331,6 +336,7 @@ void X86JITCore::RegisterBranchHandlers() {
   REGISTER_OP(THUNK,             Thunk);
   REGISTER_OP(VALIDATECODE,      ValidateCode);
   REGISTER_OP(REMOVECODEENTRY,   RemoveCodeEntry);
+  REGISTER_OP(DEFERREDSIGNALCHECK,   DeferredSignalCheck);
   REGISTER_OP(CPUID,             CPUID);
 #undef REGISTER_OP
 }

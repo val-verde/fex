@@ -275,7 +275,7 @@ private:
     uint64_t Offset;
     uint64_t Length;
 
-    VMAOptions Flags;
+    VMAOptions Options;
   };
 
   struct VMATracking {

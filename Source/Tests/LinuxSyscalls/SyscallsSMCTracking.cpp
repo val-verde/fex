@@ -32,11 +32,11 @@ bool SyscallHandler::HandleSegfault(FEXCore::Core::InternalThreadState *Thread, 
     auto Entry = _SyscallHandler->VMATracking.LookupVMAUnsafe(FaultAddress);
 
     if (Entry != _SyscallHandler->VMATracking.VMAs.end()) {
-      if (Entry->second.Flags.Prot.Writable) {
+      if (Entry->second.Options.Prot.Writable) {
 
         auto FaultBase = FEXCore::AlignDown(FaultAddress, FHU::FEX_PAGE_SIZE);
 
-        if (Entry->second.Flags.Flags.Shared) {
+        if (Entry->second.Options.Flags.Shared) {
           LOGMAN_THROW_A_FMT(Entry->second.Resource, "VMA tracking error");
 
           auto Offset = FaultBase - Entry->first + Entry->second.Offset;
@@ -47,7 +47,7 @@ bool SyscallHandler::HandleSegfault(FEXCore::Core::InternalThreadState *Thread, 
           do {
             if (VMA->Offset <= Offset && (VMA->Offset + VMA->Length) > Offset) {
               auto FaultMirrored = Offset - VMA->Offset + VMA->Base;
-              if (VMA->Flags.Prot.Writable) {
+              if (VMA->Options.Prot.Writable) {
                 auto rv = mprotect((void *)FaultMirrored, FHU::FEX_PAGE_SIZE, PROT_READ | PROT_WRITE);
                 LogMan::Throw::AFmt(rv == 0, "mprotect({}, {}) failed", FaultMirrored, FHU::FEX_PAGE_SIZE);
               }
@@ -97,7 +97,7 @@ void SyscallHandler::MarkGuestExecutableRange(uint64_t Start, uint64_t Length) {
         const auto ProtectBase = std::max(MapBase, Base);
         const auto ProtectSize = std::min(MapTop, Top) - ProtectBase;
 
-        if (Mapping->second.Flags.Flags.Shared) {
+        if (Mapping->second.Options.Flags.Shared) {
           LOGMAN_THROW_A_FMT(Mapping->second.Resource, "VMA tracking error");
 
           auto OffsetBase = ProtectBase - Mapping->first + Mapping->second.Offset;
@@ -111,7 +111,7 @@ void SyscallHandler::MarkGuestExecutableRange(uint64_t Start, uint64_t Length) {
             auto VMAOffsetTop = VMA->Offset + VMA->Length;
             auto VMABase = VMA->Base;
 
-            if (VMA->Flags.Prot.Writable && VMAOffsetBase < OffsetTop && VMAOffsetTop > OffsetBase) {
+            if (VMA->Options.Prot.Writable && VMAOffsetBase < OffsetTop && VMAOffsetTop > OffsetBase) {
 
               const auto MirroredBase = std::max(VMAOffsetBase, OffsetBase);
               const auto MirroredSize = std::min(OffsetTop, VMAOffsetTop) - MirroredBase;
@@ -121,7 +121,7 @@ void SyscallHandler::MarkGuestExecutableRange(uint64_t Start, uint64_t Length) {
             }
           } while ((VMA = VMA->ResourceNextVMA));
 
-        } else if (Mapping->second.Flags.Prot.Writable) {
+        } else if (Mapping->second.Options.Prot.Writable) {
           int rv = mprotect((void *)ProtectBase, ProtectSize, PROT_READ);
 
           LogMan::Throw::AFmt(rv == 0, "mprotect({}, {}) failed", ProtectBase, ProtectSize);
@@ -156,6 +156,8 @@ static std::string get_fdpath(int fd) {
 }
 
 void SyscallHandler::TrackMmap(uintptr_t Base, uintptr_t Size, int Prot, int Flags, int fd, off_t Offset) {
+	Size = FEXCore::AlignUp(Size, FHU::FEX_PAGE_SIZE);
+
   {
     FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
 
@@ -197,6 +199,8 @@ void SyscallHandler::TrackMmap(uintptr_t Base, uintptr_t Size, int Prot, int Fla
 }
 
 void SyscallHandler::TrackMunmap(uintptr_t Base, uintptr_t Size) {
+	Size = FEXCore::AlignUp(Size, FHU::FEX_PAGE_SIZE);
+
   {
     FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
 
@@ -209,6 +213,8 @@ void SyscallHandler::TrackMunmap(uintptr_t Base, uintptr_t Size) {
 }
 
 void SyscallHandler::TrackMprotect(uintptr_t Base, uintptr_t Size, int Prot) {
+	Size = FEXCore::AlignUp(Size, FHU::FEX_PAGE_SIZE);
+
   {
     FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
 
@@ -221,6 +227,9 @@ void SyscallHandler::TrackMprotect(uintptr_t Base, uintptr_t Size, int Prot) {
 }
 
 void SyscallHandler::TrackMremap(uintptr_t OldAddress, size_t OldSize, size_t NewSize, int flags, uintptr_t NewAddress) {
+	OldSize = FEXCore::AlignUp(OldSize, FHU::FEX_PAGE_SIZE);
+	NewSize = FEXCore::AlignUp(NewSize, FHU::FEX_PAGE_SIZE);
+
   {
 
     FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
@@ -229,7 +238,7 @@ void SyscallHandler::TrackMremap(uintptr_t OldAddress, size_t OldSize, size_t Ne
 
     auto OldResource = OldVMA->second.Resource;
     auto OldOffset = OldVMA->second.Offset + OldAddress - OldVMA->first;
-    auto OldFlags = OldVMA->second.Flags;
+    auto OldOptions = OldVMA->second.Options;
 
     LOGMAN_THROW_A_FMT(OldVMA != VMATracking.VMAs.end(), "VMA Tracking corruption");
 
@@ -237,8 +246,8 @@ void SyscallHandler::TrackMremap(uintptr_t OldAddress, size_t OldSize, size_t Ne
       // Mirror existing mapping
       // must be a shared mapping
       LOGMAN_THROW_A_FMT(OldResource != nullptr, "VMA Tracking error");
-      LOGMAN_THROW_A_FMT(OldFlags.Flags.Shared, "VMA Tracking error");
-      VMATracking.SetUnsafe(CTX, OldResource, NewAddress, OldOffset, NewSize, OldFlags);
+      LOGMAN_THROW_A_FMT(OldOptions.Flags.Shared, "VMA Tracking error");
+      VMATracking.SetUnsafe(CTX, OldResource, NewAddress, OldOffset, NewSize, OldOptions);
     } else {
 
 // MREMAP_DONTUNMAP is kernel 5.7+
@@ -250,7 +259,7 @@ void SyscallHandler::TrackMremap(uintptr_t OldAddress, size_t OldSize, size_t Ne
       }
 
       // Make anonymous mapping
-      VMATracking.SetUnsafe(CTX, OldResource, NewAddress, OldOffset, NewSize, OldFlags);
+      VMATracking.SetUnsafe(CTX, OldResource, NewAddress, OldOffset, NewSize, OldOptions);
     }
   }
 
@@ -307,8 +316,11 @@ void SyscallHandler::TrackShmdt(uintptr_t Base) {
 }
 
 void SyscallHandler::TrackMadvise(uintptr_t Base, uintptr_t Size, int advice) {
-  FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
-  // TODO
+	Size = FEXCore::AlignUp(Size, FHU::FEX_PAGE_SIZE);
+	{
+		FHU::ScopedSignalMaskWithUniqueLock lk(_SyscallHandler->VMATracking.Mutex);
+  	// TODO
+	}
 }
 
 }

@@ -156,88 +156,92 @@ void SyscallHandler::VMATracking::SetUnsafe(FEXCore::Context::Context *CTX, Mapp
   }
 }
 
-// XXX this is preliminary and will get rechecked & cleaned up
-// Remove mappings in a range, freeing their associated MappedResource, unless it is equal to PreservedMappedResource
+// Remove mappings in a range, possibly spliting them if needed and 
+// freeing their associated MappedResource unless it is equal to PreservedMappedResource
 void SyscallHandler::VMATracking::ClearUnsafe(FEXCore::Context::Context *CTX, uintptr_t Base, uintptr_t Length,
                                               MappedResource *PreservedMappedResource) {
   const auto Top = Base + Length;
 
   // find the first Mapping at or after the Range ends, or ::end()
   // Top is the address after the end
-  auto MappingIter = VMAs.lower_bound(Top);
+  auto CurrentIter = VMAs.lower_bound(Top);
 
   // Iterate backwards all mappings
-  while (MappingIter != VMAs.begin()) {
-    MappingIter--;
+  while (CurrentIter != VMAs.begin()) {
+    CurrentIter--;
 
-    const auto Mapping = &MappingIter->second;
-    const auto MapBase = MappingIter->first;
-    const auto MapTop = MapBase + Mapping->Length;
+    const auto Current = &CurrentIter->second;
+    const auto MapBase = Current->Base;
+    const auto MapTop = MapBase + Current->Length;
+    const auto OffsetDiff = Current->Offset - MapBase;
 
     if (MapTop <= Base) {
       // Mapping ends before the Range start, exit
       break;
-    } else if (MapBase < Base && MapTop <= Top) {
-      // Mapping starts before Range & ends at or before Range, trim end
-      Mapping->Length = Base - MapBase;
-    } else if (MapBase < Base && MapTop > Top) {
-      // Mapping starts before Range & ends after Range, split
+    } else {
+      const bool HasFirstPart = MapBase < Base;
+      const bool HasTrailingPart = MapTop > Top;
 
-      // trim first half
-      Mapping->Length = Base - MapBase;
+      // (1) HasFirstPart, !HasTrailingPart -> trim
+      // (2) HasFirstPart, HasTrailingPart -> trim, insert trailing, list add after first part
+      // (3) !HasFirstPart, !HasTrailing part -> list remove, erase
+      // (4) !HasFirstPart, HasTrailing part -> insert trailing, list replace first part, erase
 
-      // insert second half, link it after Mapping
-      auto NewOffset = Mapping->Offset + MapBase + Length;
-      auto NewLength = MapTop - Top;
+      if (HasFirstPart) {
+        // Handle trim for (1) & (2)
+        Current->Length = Base - MapBase;
+      } else if (!HasTrailingPart) {
+        // Handle all of (3)
+        // Mapping is included or equal to Range, delete
 
-      auto Inserted =
-          VMAs.emplace(Top, VMAEntry{Mapping->Resource, Mapping, Mapping->ResourceNextVMA, Top, NewOffset, NewLength, Mapping->Flags});
-      LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
-      if (Mapping->Resource) {
-        ListInsert(Mapping, &Inserted.first->second);
-      }
-    } else if (MapBase >= Base && MapTop <= Top) {
-      // Mapping is included or equal to Range, delete
-      // returns next element, so -- is safe at loop
-
-      // If linked to a Mapped Resource, remove from linked list and possibly delete the Mapped Resource
-      if (Mapping->Resource) {
-        if (ListRemove(Mapping) && Mapping->Resource != PreservedMappedResource) {
-          if (Mapping->Resource->AOTIRCacheEntry) {
-            FEXCore::Context::UnloadAOTIRCacheEntry(CTX, Mapping->Resource->AOTIRCacheEntry);
+        // If linked to a Mapped Resource, remove from linked list and possibly delete the Mapped Resource
+        if (Current->Resource) {
+          if (ListRemove(Current) && Current->Resource != PreservedMappedResource) {
+            if (Current->Resource->AOTIRCacheEntry) {
+              FEXCore::Context::UnloadAOTIRCacheEntry(CTX, Current->Resource->AOTIRCacheEntry);
+            }
+            MappedResources.erase(Current->Resource->Iterator);
           }
-          MappedResources.erase(Mapping->Resource->Iterator);
+        }
+
+        // returns next element, so -- is safe at loop
+        CurrentIter = VMAs.erase(CurrentIter);
+        continue; // we're done
+      }
+
+      const bool ReplaceAndErase = !HasFirstPart;
+
+      if (HasTrailingPart) {
+        // Handle insert of (2), (4)
+
+        // insert trailing part, link it after Mapping
+        auto NewOffset = OffsetDiff + Top;
+        auto NewLength = MapTop - Top;
+
+        auto Inserted = VMAs.emplace(
+            Top, VMAEntry{Current->Resource, ReplaceAndErase ?  Current->ResourcePrevVMA : Current, Current->ResourceNextVMA, Top, NewOffset, NewLength, Current->Options});
+        LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
+        auto TrailingPart = &Inserted.first->second;
+        if (Current->Resource) {
+          if (ReplaceAndErase) {
+            // Handle list replace of (4)
+            ListReplace(Current, TrailingPart);
+          } else {
+            // Handle list insert (2)
+            ListInsert(Current, TrailingPart);
+          }
         }
       }
 
-      // remove
-      MappingIter = VMAs.erase(MappingIter);
-    } else if (MapBase >= Base && MapTop > Top) {
-      // Mapping starts after or at Range && ends after Range, trim start
-
-      auto NewOffset = Mapping->Offset + MapBase + Length;
-      auto NewLength = MapTop - Top;
-      // insert second half
-      // Link it as a replacement to Mapping
-      auto Inserted = VMAs.emplace(
-          Top, VMAEntry{Mapping->Resource, Mapping->ResourcePrevVMA, Mapping->ResourceNextVMA, Top, NewOffset, NewLength, Mapping->Flags});
-      LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
-
-      // If linked to a Mapped Resource, remove from linked list
-      if (Mapping->Resource) {
-        ListReplace(Mapping, &Inserted.first->second);
+      if (ReplaceAndErase) {
+        // Handle erase of (4)
+        // returns next element, so -- is safe at loop
+        CurrentIter = VMAs.erase(CurrentIter);
       }
-
-      // erase original
-      // returns next element, so it can be decremented safely in the next loop iteration
-      MappingIter = VMAs.erase(MappingIter);
-    } else {
-      ERROR_AND_DIE_FMT("Invalid Case");
     }
   }
 }
 
-// XXX this is preliminary and will get rechecked & cleaned up
 // Change flags of mappings in a range and split the mappings if needed
 void SyscallHandler::VMATracking::ChangeUnsafe(uintptr_t Base, uintptr_t Length, VMAProt Prot) {
   const auto Top = Base + Length;
@@ -250,129 +254,112 @@ void SyscallHandler::VMATracking::ChangeUnsafe(uintptr_t Base, uintptr_t Length,
   while (MappingIter != VMAs.begin()) {
     MappingIter--;
 
-    const auto Mapping = &MappingIter->second;
-    const auto MapBase = MappingIter->first;
-    const auto MapTop = MapBase + Mapping->Length;
+    auto Current = &MappingIter->second;
+    const auto MapBase = Current->Base;
+    const auto MapTop = MapBase + Current->Length;
+    const auto MapOptions = Current->Options;
+
+    const auto OffsetDiff = Current->Offset - MapBase;
+
+    auto NewOptions = Current->Options;
+    NewOptions.Prot = Prot;
+
 
     if (MapTop <= Base) {
       // Mapping ends before the Range start, exit
       break;
-    } else if (Mapping->Flags.Prot == Prot) {
+    } else if (MapOptions.Prot == Prot) {
+      // Mapping already has the needed flags
       continue;
-    } else if (MapBase < Base && MapTop <= Top) {
-      // Mapping starts before Range & ends at or before Range, split second half
-
-      // Trim end of original mapping
-      Mapping->Length = Base - MapBase;
-
-      // Make new VMA with new flags, insert remaining of the original mapping
-      auto NewOffset = Mapping->Offset + Mapping->Length;
-      auto NewLength = Top - Base;
-      auto NewFlags = Mapping->Flags;
-      NewFlags.Prot = Prot;
-
-      auto Inserted =
-          VMAs.emplace(Base, VMAEntry{Mapping->Resource, Mapping, Mapping->ResourceNextVMA, Base, NewOffset, NewLength, NewFlags});
-      LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
-      if (Mapping->Resource) {
-        ListInsert(Mapping, &Inserted.first->second);
-      }
-    } else if (MapBase < Base && MapTop > Top) {
-      // Mapping starts before Range & ends after Range, split twice
-
-      // Trim end of original mapping
-      Mapping->Length = Base - MapBase;
-
-      // Make new VMA with new flags, insert for length of mapping
-      auto NewOffset1 = Mapping->Offset + Mapping->Length;
-      auto NewLength1 = Top - Base;
-      auto NewFlags1 = Mapping->Flags;
-      NewFlags1.Prot = Prot;
-
-      auto Inserted1 =
-          VMAs.emplace(Base, VMAEntry{Mapping->Resource, Mapping, Mapping->ResourceNextVMA, Base, NewOffset1, NewLength1, NewFlags1});
-      LOGMAN_THROW_A_FMT(Inserted1.second, "VMA tracking error");
-      auto Mapping1 = &Inserted1.first->second;
-
-      if (Mapping->Resource) {
-        ListInsert(Mapping, Mapping1);
-      }
-
-      // Insert the rest of the mapping with original flags
-
-      // Make new VMA with new flags, insert for length of mapping
-      auto NewOffset2 = Mapping1->Offset + Mapping1->Length;
-      auto NewLength2 = MapTop - Top;
-
-      auto Inserted2 =
-          VMAs.emplace(Top, VMAEntry{Mapping->Resource, Mapping1, Mapping1->ResourceNextVMA, Top, NewOffset2, NewLength2, Mapping->Flags});
-      LOGMAN_THROW_A_FMT(Inserted2.second, "VMA tracking error");
-      if (Mapping->Resource) {
-        ListInsert(Mapping1, &Inserted2.first->second);
-      }
-    } else if (MapBase >= Base && MapTop <= Top) {
-      // Mapping fully contained
-      // Just update flags
-
-      Mapping->Flags.Prot = Prot;
-    } else if (MapBase >= Base && MapTop > Top) {
-      // Mapping starts after or at Range && ends after Range
-
-      auto MapFlags = Mapping->Flags;
-
-      // Trim start, update flags
-      Mapping->Length = Top - MapBase;
-      Mapping->Flags.Prot = Prot;
-
-      auto NewOffset = Mapping->Offset + Mapping->Length;
-      auto NewLength = MapTop - Top;
-
-      // insert second part with original flags
-      // Link it as a replacement to Mapping
-      auto Inserted =
-          VMAs.emplace(Top, VMAEntry{Mapping->Resource, Mapping, Mapping->ResourceNextVMA, Top, NewOffset, NewLength, MapFlags});
-      LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
-      if (Mapping->Resource) {
-        ListInsert(Mapping, &Inserted.first->second);
-      }
     } else {
-      ERROR_AND_DIE_FMT("Invalid Case");
+      const bool HasFirstPart = MapBase < Base;
+      const bool HasTrailingPart = MapTop > Top;
+
+      if (HasFirstPart) {
+        // Mapping starts before range, split first part
+
+        // Trim end of original mapping
+        Current->Length = Base - MapBase;
+
+        // Make new VMA with new flags, insert for length of range
+        auto NewOffset = OffsetDiff + Base;
+        auto NewLength = Top - Base;
+
+        auto Inserted =
+            VMAs.emplace(Base, VMAEntry{Current->Resource, Current, Current->ResourceNextVMA, Base, NewOffset, NewLength, NewOptions});
+        LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
+        auto RestOfMapping = &Inserted.first->second;
+
+        if (Current->Resource) {
+          ListInsert(Current, RestOfMapping);
+        }
+
+        Current = RestOfMapping;
+      } else {
+        // Mapping starts in range, just change Prot
+        Current->Options.Prot = Prot;
+      }
+
+      if (HasTrailingPart) {
+        // ends after Range, split last part and insert with original flags
+
+        // Trim the mapping (possibly already trimmed)
+        Current->Length = Top - Current->Base;
+
+        // prot has already been changed
+
+        // Make new VMA with original flags, insert for remaining length
+        auto NewOffset = OffsetDiff + Top;
+        auto NewLength = MapTop - Top;
+
+        auto Inserted =
+            VMAs.emplace(Top, VMAEntry{Current->Resource, Current, Current->ResourceNextVMA, Top, NewOffset, NewLength, MapOptions});
+        LOGMAN_THROW_A_FMT(Inserted.second, "VMA tracking error");
+        auto TrailingMapping = &Inserted.first->second;
+
+        if (Current->Resource) {
+          ListInsert(Current, TrailingMapping);
+        }
+      }
     }
   }
 }
 
 // This matches the peculiarities algorithm used in linux ksys_shmdt (linux kernel 5.16, ipc/shm.c)
 uintptr_t SyscallHandler::VMATracking::ClearShmUnsafe(FEXCore::Context::Context *CTX, uintptr_t Base) {
-  auto Entry = VMAs.upper_bound(Base);
 
-  if (Entry != VMAs.begin()) {
-    --Entry;
+  // First first VMA at or after Base
+  // Iterate until first SHM VMA, with matching offset, get length
+  // Iterate for the rest of the length removing instances of found SHM
 
-    do {
-      if (Entry->second.Base - Base == Entry->second.Offset && Entry->second.Resource &&
-          Entry->second.Resource->Iterator->first.dev == MRID_SHM) {
+  // returns first element that is greater or equal or ::end
+  auto Entry = VMAs.lower_bound(Base);
 
-        const auto ShmLength = Entry->second.Resource->Iterator->second.Length;
-        const auto Resource = Entry->second.Resource;
+  while (Entry != VMAs.end()) {
+    LOGMAN_THROW_A_FMT(Entry->second.Base >= Base, "VMA tracking corruption");
+    if (Entry->second.Base - Base == Entry->second.Offset && Entry->second.Resource &&
+        Entry->second.Resource->Iterator->first.dev == MRID_SHM) {
 
-        do {
-          if (Entry->second.Resource == Resource) {
-            if (ListRemove(&Entry->second)) {
-              if (Entry->second.Resource->AOTIRCacheEntry) {
-                FEXCore::Context::UnloadAOTIRCacheEntry(CTX, Entry->second.Resource->AOTIRCacheEntry);
-              }
-              MappedResources.erase(Entry->second.Resource->Iterator);
+      const auto ShmLength = Entry->second.Resource->Iterator->second.Length;
+      const auto Resource = Entry->second.Resource;
+
+      do {
+        if (Entry->second.Resource == Resource) {
+          if (ListRemove(&Entry->second)) {
+            if (Entry->second.Resource->AOTIRCacheEntry) {
+              FEXCore::Context::UnloadAOTIRCacheEntry(CTX, Entry->second.Resource->AOTIRCacheEntry);
             }
-            Entry = VMAs.erase(Entry);
-          } else {
-            Entry++;
+            MappedResources.erase(Entry->second.Resource->Iterator);
           }
+          Entry = VMAs.erase(Entry);
+        } else {
+          Entry++;
+        }
+      } while (++Entry != VMAs.end() && (Entry->second.Base + Entry->second.Length - Base) <= ShmLength);
 
-        } while (Entry != VMAs.end() && (Entry->second.Base + Entry->second.Length - Base) <= ShmLength);
-
-        return ShmLength;
-      }
-    } while (++Entry != VMAs.end());
+      return ShmLength;
+    }
+    Entry++;
   }
 
   return 0;

@@ -55,9 +55,9 @@ namespace FEX::HLE {
     /**  @} */
 
       void UninstallHostHandler(int Signal);
-  protected:
     // Called from the thunk handler to handle the signal
     void HandleGuestSignal(FEXCore::Core::InternalThreadState *Thread, int Signal, void *Info, void *UContext) override;
+  protected:
 
     void RegisterFrontendTLSState(FEXCore::Core::InternalThreadState *Thread) override;
     void UninstallFrontendTLSState(FEXCore::Core::InternalThreadState *Thread) override;

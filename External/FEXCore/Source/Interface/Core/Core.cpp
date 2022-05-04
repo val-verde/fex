@@ -565,10 +565,10 @@ namespace FEXCore::Context {
 
     auto FrameWithGuard = mmap(0, sizeof(FEXCore::Core::CpuStateFrame) + 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     LOGMAN_THROW_A_FMT(FrameWithGuard != MAP_FAILED, "Failed to allocate thread context");
-
+/*
     auto ok = mprotect(FrameWithGuard, 4096, PROT_NONE);
     LOGMAN_THROW_A_FMT(ok == 0, "Failed to allocate thread context");
-
+*/
     Thread->CurrentFrame = reinterpret_cast<FEXCore::Core::CpuStateFrame*>(
       4096 + reinterpret_cast<uintptr_t>(FrameWithGuard)
     );
@@ -753,6 +753,8 @@ namespace FEXCore::Context {
 
       // Reset any block-specific state
       Thread->OpDispatcher->StartNewBlock();
+
+      Thread->OpDispatcher->_DeferredSignalCheck(Block.Entry);
 
       uint64_t InstsInBlock = Block.NumInstructions;
 

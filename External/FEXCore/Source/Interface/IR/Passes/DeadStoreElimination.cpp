@@ -188,7 +188,8 @@ bool DeadStoreElimination::Run(IREmitter *IREmit) {
           else
             BlockInfo.fpr.reads |= FPRBit(Op->Offset, IROp->Size);
         } else if (IROp->Op == OP_STORECONTEXTINDEXED ||
-               IROp->Op == OP_LOADCONTEXTINDEXED) {
+               IROp->Op == OP_LOADCONTEXTINDEXED ||
+               IROp->Op == OP_DEFERREDSIGNALCHECK) {
           auto& BlockInfo = InfoMap[BlockNode];
 
           //// GPR ////

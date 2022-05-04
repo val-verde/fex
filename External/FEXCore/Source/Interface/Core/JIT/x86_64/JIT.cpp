@@ -396,6 +396,18 @@ void X86JITCore::InitializeSignalHandlers(FEXCore::Context::Context *CTX) {
     return Core->Dispatcher->HandleSIGILL(Signal, info, ucontext);
   }, true);
 
+  CTX->SignalDelegation->RegisterHostSignalHandler(SIGSEGV, [](FEXCore::Core::InternalThreadState *Thread, int Signal, void *info, void *ucontext) -> bool {
+
+    if ((uintptr_t)Thread->CurrentFrame == ((uintptr_t)((siginfo_t*)info)->si_addr) + 1) {
+      X86JITCore *Core = reinterpret_cast<X86JITCore*>(Thread->CPUBackend.get());
+      
+      Thread->CTX->SignalDelegation->HandleGuestSignal(Thread, Core->Dispatcher->pending_sig.siginfo.si_signo, 0, ucontext);
+      return true;
+    } else {
+      return false;
+    }
+  }, true);
+
   CTX->SignalDelegation->RegisterHostSignalHandler(SignalDelegator::SIGNAL_FOR_PAUSE, [](FEXCore::Core::InternalThreadState *Thread, int Signal, void *info, void *ucontext) -> bool {
     X86JITCore *Core = reinterpret_cast<X86JITCore*>(Thread->CPUBackend.get());
     return Core->Dispatcher->HandleSignalPause(Signal, info, ucontext);

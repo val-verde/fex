@@ -342,6 +342,7 @@ private:
   DEF_OP(ValidateCode);
   DEF_OP(RemoveThreadCodeEntry);
   DEF_OP(DeferredSignalCheck);
+  DEF_OP(MemCheck);
   DEF_OP(CPUID);
 
   ///< Conversion ops

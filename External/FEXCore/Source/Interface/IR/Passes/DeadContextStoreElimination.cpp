@@ -662,7 +662,12 @@ bool RCLSE::RedundantStoreLoadElimination(FEXCore::IR::IREmitter *IREmit) {
         }
       }
       else if (IROp->Op == OP_SYSCALL ||
-               IROp->Op == OP_INLINESYSCALL) {
+               IROp->Op == OP_INLINESYSCALL ||
+               IROp->Op == OP_MEMCHECK ||
+               IROp->Op == OP_DEFERREDSIGNALCHECK) {
+
+        ResetClassificationAccesses(&LocalInfo);
+#if 0
         FEXCore::IR::SyscallFlags Flags{};
         if (IROp->Op == OP_SYSCALL) {
           auto Op = IROp->C<IR::IROp_Syscall>();
@@ -677,6 +682,7 @@ bool RCLSE::RedundantStoreLoadElimination(FEXCore::IR::IREmitter *IREmit) {
           // We can't track through these
           ResetClassificationAccesses(&LocalInfo);
         }
+#endif
       }
       else if (IROp->Op == OP_STORECONTEXTINDEXED ||
                IROp->Op == OP_LOADCONTEXTINDEXED ||

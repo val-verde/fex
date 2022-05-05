@@ -189,7 +189,8 @@ bool DeadStoreElimination::Run(IREmitter *IREmit) {
             BlockInfo.fpr.reads |= FPRBit(Op->Offset, IROp->Size);
         } else if (IROp->Op == OP_STORECONTEXTINDEXED ||
                IROp->Op == OP_LOADCONTEXTINDEXED ||
-               IROp->Op == OP_DEFERREDSIGNALCHECK) {
+               IROp->Op == OP_DEFERREDSIGNALCHECK || 
+               IROp->Op == OP_MEMCHECK) {
           auto& BlockInfo = InfoMap[BlockNode];
 
           //// GPR ////
@@ -199,6 +200,10 @@ bool DeadStoreElimination::Run(IREmitter *IREmit) {
           //// FPR ////
           // We can't track through these
           BlockInfo.fpr.reads = -1;
+
+          //// FLAGS ////
+          // We can't track through these
+          BlockInfo.flag.reads = -1;
         } else if (IROp->Op == OP_LOADCONTEXT) {
           auto Op = IROp->C<IR::IROp_LoadContext>();
 

@@ -2868,7 +2868,7 @@ void OpDispatchBuilder::BTOp(OpcodeArgs) {
 
     // Now add the addresses together and load the memory
     OrderedNode *MemoryLocation = _Add(Dest, Src);
-    Result = _LoadMemAutoTSO(GPRClass, 1, MemoryLocation, 1);
+    Result = _LoadMemAutoTSO(Op->PC, GPRClass, 1, MemoryLocation, 1);
 
     // Now shift in to the correct bit location
     Result = _Lshr(Result, BitSelect);
@@ -2943,12 +2943,12 @@ void OpDispatchBuilder::BTROp(OpcodeArgs) {
       // Now shift in to the correct bit location
       Result = _Lshr(Result, BitSelect);
     } else {
-      OrderedNode *Value = _LoadMemAutoTSO(GPRClass, 1, MemoryLocation, 1);
+      OrderedNode *Value = _LoadMemAutoTSO(Op->PC, GPRClass, 1, MemoryLocation, 1);
 
       // Now shift in to the correct bit location
       Result = _Lshr(Value, BitSelect);
       Value = _Andn(Value, BitMask);
-      _StoreMemAutoTSO(GPRClass, 1, MemoryLocation, Value, 1);
+      _StoreMemAutoTSO(Op->PC, GPRClass, 1, MemoryLocation, Value, 1);
     }
   }
   SetRFLAG<FEXCore::X86State::RFLAG_CF_LOC>(Result);
@@ -3017,12 +3017,12 @@ void OpDispatchBuilder::BTSOp(OpcodeArgs) {
       // Now shift in to the correct bit location
       Result = _Lshr(Result, BitSelect);
     } else {
-      OrderedNode *Value = _LoadMemAutoTSO(GPRClass, 1, MemoryLocation, 1);
+      OrderedNode *Value = _LoadMemAutoTSO(Op->PC, GPRClass, 1, MemoryLocation, 1);
 
       // Now shift in to the correct bit location
       Result = _Lshr(Value, BitSelect);
       Value = _Or(Value, BitMask);
-      _StoreMemAutoTSO(GPRClass, 1, MemoryLocation, Value, 1);
+      _StoreMemAutoTSO(Op->PC, GPRClass, 1, MemoryLocation, Value, 1);
     }
   }
   SetRFLAG<FEXCore::X86State::RFLAG_CF_LOC>(Result);
@@ -3091,12 +3091,12 @@ void OpDispatchBuilder::BTCOp(OpcodeArgs) {
       // Now shift in to the correct bit location
       Result = _Lshr(Result, BitSelect);
     } else {
-      OrderedNode *Value = _LoadMemAutoTSO(GPRClass, 1, MemoryLocation, 1);
+      OrderedNode *Value = _LoadMemAutoTSO(Op->PC, GPRClass, 1, MemoryLocation, 1);
 
       // Now shift in to the correct bit location
       Result = _Lshr(Value, BitSelect);
       Value = _Xor(Value, BitMask);
-      _StoreMemAutoTSO(GPRClass, 1, MemoryLocation, Value, 1);
+      _StoreMemAutoTSO(Op->PC, GPRClass, 1, MemoryLocation, Value, 1);
     }
   }
   SetRFLAG<FEXCore::X86State::RFLAG_CF_LOC>(Result);
@@ -3332,7 +3332,7 @@ void OpDispatchBuilder::XLATOp(OpcodeArgs) {
   Src = AppendSegmentOffset(Src, Op->Flags, FEXCore::X86Tables::DecodeFlags::FLAG_DS_PREFIX);
   Src = _Add(Src, Offset);
 
-  auto Res = _LoadMemAutoTSO(GPRClass, 1, Src, 1);
+  auto Res = _LoadMemAutoTSO(Op->PC, GPRClass, 1, Src, 1);
 
   _StoreContext(1, GPRClass, Res, RAXOffset);
 }
@@ -3504,7 +3504,7 @@ void OpDispatchBuilder::STOSOp(OpcodeArgs) {
     Dest = AppendSegmentOffset(Dest, 0, FEXCore::X86Tables::DecodeFlags::FLAG_ES_PREFIX, true);
 
     // Store to memory where RDI points
-    _StoreMemAutoTSO(GPRClass, Size, Dest, Src, Size);
+    _StoreMemAutoTSO(Op->PC, GPRClass, Size, Dest, Src, Size);
 
     auto SizeConst = _Constant(Size);
     auto NegSizeConst = _Constant(-Size);
@@ -3564,7 +3564,7 @@ void OpDispatchBuilder::STOSOp(OpcodeArgs) {
       Dest = AppendSegmentOffset(Dest, 0, FEXCore::X86Tables::DecodeFlags::FLAG_ES_PREFIX, true);
 
       // Store to memory where RDI points
-      _StoreMemAutoTSO(GPRClass, Size, Dest, Src, Size);
+      _StoreMemAutoTSO(Op->PC, GPRClass, Size, Dest, Src, Size);
 
       OrderedNode *TailCounter = _LoadContext(GPRSize, GPRClass, GPROffset(X86State::REG_RCX));
       OrderedNode *TailDest = _LoadContext(GPRSize, GPRClass, GPROffset(X86State::REG_RDI));
@@ -3636,10 +3636,10 @@ void OpDispatchBuilder::MOVSOp(OpcodeArgs) {
       Dest = AppendSegmentOffset(Dest, 0, FEXCore::X86Tables::DecodeFlags::FLAG_ES_PREFIX, true);
       Src = AppendSegmentOffset(Src, Op->Flags, FEXCore::X86Tables::DecodeFlags::FLAG_DS_PREFIX);
 
-      Src = _LoadMemAutoTSO(GPRClass, Size, Src, Size);
+      Src = _LoadMemAutoTSO(Op->PC, GPRClass, Size, Src, Size);
 
       // Store to memory where RDI points
-      _StoreMemAutoTSO(GPRClass, Size, Dest, Src, Size);
+      _StoreMemAutoTSO(Op->PC, GPRClass, Size, Dest, Src, Size);
 
       OrderedNode *TailCounter = _LoadContext(GPRSize, GPRClass, GPROffset(X86State::REG_RCX));
 
@@ -3671,10 +3671,10 @@ void OpDispatchBuilder::MOVSOp(OpcodeArgs) {
     RDI= AppendSegmentOffset(RDI, 0, FEXCore::X86Tables::DecodeFlags::FLAG_ES_PREFIX, true);
     RSI = AppendSegmentOffset(RSI, Op->Flags, FEXCore::X86Tables::DecodeFlags::FLAG_DS_PREFIX);
 
-    auto Src = _LoadMemAutoTSO(GPRClass, Size, RSI, Size);
+    auto Src = _LoadMemAutoTSO(Op->PC, GPRClass, Size, RSI, Size);
 
     // Store to memory where RDI points
-    _StoreMemAutoTSO(GPRClass, Size, RDI, Src, Size);
+    _StoreMemAutoTSO(Op->PC, GPRClass, Size, RDI, Src, Size);
 
     RSI = _Add(RSI, PtrDir);
     RDI = _Add(RDI, PtrDir);
@@ -3704,8 +3704,8 @@ void OpDispatchBuilder::CMPSOp(OpcodeArgs) {
     // Default DS prefix
     Dest_RSI = AppendSegmentOffset(Dest_RSI, Op->Flags, FEXCore::X86Tables::DecodeFlags::FLAG_DS_PREFIX);
 
-    auto Src1 = _LoadMemAutoTSO(GPRClass, Size, Dest_RDI, Size);
-    auto Src2 = _LoadMemAutoTSO(GPRClass, Size, Dest_RSI, Size);
+    auto Src1 = _LoadMemAutoTSO(Op->PC, GPRClass, Size, Dest_RDI, Size);
+    auto Src2 = _LoadMemAutoTSO(Op->PC, GPRClass, Size, Dest_RSI, Size);
 
     OrderedNode* Result = _Sub(Src2, Src1);
     if (Size < 4)
@@ -3764,7 +3764,7 @@ void OpDispatchBuilder::CMPSOp(OpcodeArgs) {
       // Default DS prefix
       Dest_RSI = AppendSegmentOffset(Dest_RSI, Op->Flags, FEXCore::X86Tables::DecodeFlags::FLAG_DS_PREFIX);
 
-      auto Src1 = _LoadMemAutoTSO(GPRClass, Size, Dest_RDI, Size);
+      auto Src1 = _LoadMemAutoTSO(Op->PC, GPRClass, Size, Dest_RDI, Size);
       auto Src2 = _LoadMem(GPRClass, Size, Dest_RSI, Size);
 
       OrderedNode* Result = _Sub(Src2, Src1);
@@ -3824,7 +3824,7 @@ void OpDispatchBuilder::LODSOp(OpcodeArgs) {
     OrderedNode *Dest_RSI = _LoadContext(GPRSize, GPRClass, GPROffset(X86State::REG_RSI));
     Dest_RSI = AppendSegmentOffset(Dest_RSI, Op->Flags, FEXCore::X86Tables::DecodeFlags::FLAG_DS_PREFIX);
 
-    auto Src = _LoadMemAutoTSO(GPRClass, Size, Dest_RSI, Size);
+    auto Src = _LoadMemAutoTSO(Op->PC, GPRClass, Size, Dest_RSI, Size);
 
     StoreResult(GPRClass, Op, Src, -1);
 
@@ -3882,7 +3882,7 @@ void OpDispatchBuilder::LODSOp(OpcodeArgs) {
       OrderedNode *Dest_RSI = _LoadContext(GPRSize, GPRClass, GPROffset(X86State::REG_RSI));
       Dest_RSI = AppendSegmentOffset(Dest_RSI, Op->Flags, FEXCore::X86Tables::DecodeFlags::FLAG_DS_PREFIX);
 
-      auto Src = _LoadMemAutoTSO(GPRClass, Size, Dest_RSI, Size);
+      auto Src = _LoadMemAutoTSO(Op->PC, GPRClass, Size, Dest_RSI, Size);
 
       StoreResult(GPRClass, Op, Src, -1);
 
@@ -3925,7 +3925,7 @@ void OpDispatchBuilder::SCASOp(OpcodeArgs) {
     Dest_RDI = AppendSegmentOffset(Dest_RDI, 0, FEXCore::X86Tables::DecodeFlags::FLAG_ES_PREFIX, true);
 
     auto Src1 = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
-    auto Src2 = _LoadMemAutoTSO(GPRClass, Size, Dest_RDI, Size);
+    auto Src2 = _LoadMemAutoTSO(Op->PC, GPRClass, Size, Dest_RDI, Size);
 
     OrderedNode* Result = _Sub(Src1, Src2);
     if (Size < 4)
@@ -3984,7 +3984,7 @@ void OpDispatchBuilder::SCASOp(OpcodeArgs) {
       Dest_RDI = AppendSegmentOffset(Dest_RDI, 0, FEXCore::X86Tables::DecodeFlags::FLAG_ES_PREFIX, true);
 
       auto Src1 = LoadSource(GPRClass, Op, Op->Src[0], Op->Flags, -1);
-      auto Src2 = _LoadMemAutoTSO(GPRClass, Size, Dest_RDI, Size);
+      auto Src2 = _LoadMemAutoTSO(Op->PC, GPRClass, Size, Dest_RDI, Size);
 
       OrderedNode* Result = _Sub(Src1, Src2);
       if (Size < 4)
@@ -4736,7 +4736,7 @@ OrderedNode *OpDispatchBuilder::LoadSource_WithOpSize(FEXCore::IR::RegisterClass
       Src = _LoadMem(Class, OpSize, Src, Align == -1 ? OpSize : Align);
     }
     else {
-      Src = _LoadMemAutoTSO(Class, OpSize, Src, Align == -1 ? OpSize : Align);
+      Src = _LoadMemAutoTSO(Op->PC, Class, OpSize, Src, Align == -1 ? OpSize : Align);
     }
   }
   return Src;
@@ -4884,7 +4884,7 @@ void OpDispatchBuilder::StoreResult_WithOpSize(FEXCore::IR::RegisterClassType Cl
         _StoreMem(Class, OpSize, MemStoreDst, Src, Align == -1 ? OpSize : Align);
       }
       else {
-        _StoreMemAutoTSO(Class, OpSize, MemStoreDst, Src, Align == -1 ? OpSize : Align);
+        _StoreMemAutoTSO(Op->PC, Class, OpSize, MemStoreDst, Src, Align == -1 ? OpSize : Align);
       }
     }
   }

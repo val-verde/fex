@@ -1194,7 +1194,7 @@ void OpDispatchBuilder::MASKMOVOp(OpcodeArgs) {
       {
         auto DestByte = _Bfe(8, 8 * Select, DestElement);
         auto MemLocation = _Add(MemDest, _Constant(Element * 8 + Select));
-        _StoreMemAutoTSO(GPRClass, 1, MemLocation, DestByte, 1);
+        _StoreMemAutoTSO(Op->PC, GPRClass, 1, MemLocation, DestByte, 1);
       }
       auto Jump = _Jump();
       auto NextJumpTarget = CreateNewCodeBlockAfter(StoreBlock);

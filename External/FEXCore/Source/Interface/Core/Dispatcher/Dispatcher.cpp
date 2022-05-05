@@ -88,6 +88,7 @@ ArchHelpers::Context::ContextBackup* Dispatcher::StoreThreadState(int Signal, vo
 }
 
 void Dispatcher::RestoreThreadState(void *ucontext) {
+/*
   uint64_t OldSP{};
   if (CTX->Config.Core() == FEXCore::Config::CONFIG_IRJIT) {
     OldSP = ArchHelpers::Context::GetSp(ucontext);
@@ -106,28 +107,56 @@ void Dispatcher::RestoreThreadState(void *ucontext) {
 
   // Now restore host state
   ArchHelpers::Context::RestoreContext(ucontext, Context);
+*/
 
-  if (Context->UContextLocation) {
-    auto Frame = ThreadState->CurrentFrame;
+  auto Frame = ThreadState->CurrentFrame;
 
+  
+  ArchHelpers::Context::SetSp(ucontext, Frame->ReturningStackLocation);
+  
+  // Hack! Go back to the top of the dispatcher top
+  // This is only safe inside the JIT rather than anything outside of it
+  ArchHelpers::Context::SetPc(ucontext, AbsoluteLoopTopAddressFillSRA);
+  // Set our state register to point to our guest thread data
+  ArchHelpers::Context::SetState(ucontext, reinterpret_cast<uint64_t>(Frame));
+
+  uint64_t UContextLocation;
+  uint64_t SigInfoLocation;
+  uintptr_t GuestSP = Frame->State.gregs[FEXCore::x86::FEX_REG_RSP];
+
+  if (CTX->Config.Is64BitMode()) {
+    SigInfoLocation = *(uint64_t*)GuestSP;
+    GuestSP += 8;
+    UContextLocation = *(uint64_t*)GuestSP;
+    GuestSP += 8;
+  } else {
+    SigInfoLocation = *(uint32_t*)GuestSP;
+    GuestSP += 4;
+    UContextLocation = *(uint32_t*)GuestSP;
+    GuestSP += 4;
+  }
+  if (UContextLocation) {
+    
+/*
     if (Context->Flags &ArchHelpers::Context::ContextFlags::CONTEXT_FLAG_INJIT) {
       // XXX: Unsupported since it needs state reconstruction
       // If we are in the JIT then SRA might need to be restored to values from the context
       // We can't currently support this since it might result in tearing without real state reconstruction
     }
+*/
 
-    if (!(Context->Flags & ArchHelpers::Context::ContextFlags::CONTEXT_FLAG_32BIT)) {
-      auto *guest_uctx = reinterpret_cast<FEXCore::x86_64::ucontext_t*>(Context->UContextLocation);
-      [[maybe_unused]] auto *guest_siginfo = reinterpret_cast<siginfo_t*>(Context->SigInfoLocation);
+    //if (!(Context->Flags & ArchHelpers::Context::ContextFlags::CONTEXT_FLAG_32BIT)) {
+    if (Frame->Thread->CTX->Config.Is64BitMode()) {
+      auto *guest_uctx = reinterpret_cast<FEXCore::x86_64::ucontext_t*>(UContextLocation);
+      [[maybe_unused]] auto *guest_siginfo = reinterpret_cast<siginfo_t*>(SigInfoLocation);
+      //((ucontext_t*)ucontext)->uc_sigmask = guest_uctx->uc_sigmask;
+      // XXX Feels a bit weird here
+      memcpy(&((ucontext_t*)ucontext)->uc_sigmask, &guest_uctx->uc_sigmask, sizeof(ucontext_t::uc_sigmask));
 
       // If the guest modified the RIP then we need to take special precautions here
-      if (Context->OriginalRIP != guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_RIP] ||
-          Context->FaultToTopAndGeneratedException) {
-        // Hack! Go back to the top of the dispatcher top
-        // This is only safe inside the JIT rather than anything outside of it
-        ArchHelpers::Context::SetPc(ucontext, AbsoluteLoopTopAddressFillSRA);
-        // Set our state register to point to our guest thread data
-        ArchHelpers::Context::SetState(ucontext, reinterpret_cast<uint64_t>(Frame));
+      /* if (Context->OriginalRIP != guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_RIP] ||
+          FaultToTopAndGeneratedException) */ {
+
 
         Frame->State.rip = guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_RIP];
         // XXX: Full context setting
@@ -176,16 +205,13 @@ void Dispatcher::RestoreThreadState(void *ucontext) {
       }
     }
     else {
-      auto *guest_uctx = reinterpret_cast<FEXCore::x86::ucontext_t*>(Context->UContextLocation);
-      [[maybe_unused]] auto *guest_siginfo = reinterpret_cast<FEXCore::x86::siginfo_t*>(Context->SigInfoLocation);
+      auto *guest_uctx = reinterpret_cast<FEXCore::x86::ucontext_t*>(UContextLocation);
+      [[maybe_unused]] auto *guest_siginfo = reinterpret_cast<FEXCore::x86::siginfo_t*>(SigInfoLocation);
+      memcpy(&((ucontext_t*)ucontext)->uc_sigmask, &guest_uctx->uc_sigmask, sizeof(ucontext_t::uc_sigmask));
+
       // If the guest modified the RIP then we need to take special precautions here
-      if (Context->OriginalRIP != guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_EIP] ||
-          Context->FaultToTopAndGeneratedException) {
-        // Hack! Go back to the top of the dispatcher top
-        // This is only safe inside the JIT rather than anything outside of it
-        ArchHelpers::Context::SetPc(ucontext, AbsoluteLoopTopAddressFillSRA);
-        // Set our state register to point to our guest thread data
-        ArchHelpers::Context::SetState(ucontext, reinterpret_cast<uint64_t>(Frame));
+      /* if (Context->OriginalRIP != guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_EIP] ||
+          FaultToTopAndGeneratedException) */ {
 
         // XXX: Full context setting
         // First 32-bytes of flags is EFLAGS broken out
@@ -276,54 +302,88 @@ static uint32_t ConvertSignalToError(int Signal, siginfo_t *HostSigInfo) {
 
 bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, GuestSigAction *GuestAction, stack_t *GuestStack) {
 
-  if (info)
+
+  // got signal at syscall?
+  // syscall may need to be re-executed with original arguments (rip points to syscall)
+  // or
+  // syscall succeeded / failed
+  // or
+  // syscall interrupted with -EINTR
+
+  // if automatic re-execution, then we ask the guest to re-execute
+  // otherwise, we handle on next branch
+
+  uint64_t OldPC = ArchHelpers::Context::GetPc(ucontext);
+
+  bool delay = ThreadState->CurrentFrame->InSyscallInfo == 0;
+  if (ThreadState->CurrentFrame->InSyscallInfo == 1 /*in syscall */ && *(uint16_t*)OldPC != 0x50f /* not automatic re-execution?*/){
+    delay = true;
+  }
+
+  if ( delay )
   {
-    // this is a bit of a hack -- better to modify signal dispatcher
-    LOGMAN_THROW_A_FMT(!pending_sig.pending, "Nested signals");
-    pending_sig.pending = true;
+    if (info)
+    {
+      // this is a bit of a hack -- better to modify signal dispatcher
+      LOGMAN_THROW_A_FMT(!pending_sig.pending, "Nested signals (non-syscall)");
+      pending_sig.pending = true;
+      
+      sigset_t set, oldset;
+      sigfillset(&set);
+      pthread_sigmask(SIG_BLOCK, &set, &oldset);
+
+      //LogMan::Msg::DFmt("Deferring signal {}", Signal);
+
+      // store signal info
+      pending_sig.siginfo = *(siginfo_t*)info;
+      pending_sig.handler_sigmask = oldset;
+      pending_sig.uc_sigmask = ((ucontext_t*)ucontext)->uc_sigmask;
+      sigfillset(&((ucontext_t*)ucontext)->uc_sigmask);
+
+      auto ok = mprotect((uint8_t*)ThreadState->CurrentFrame - 4096, 4096, PROT_NONE);
+      LOGMAN_THROW_A_FMT(ok != -1, "mprotect of signal guard failed");
+
+      return true;
+    } else {
+      sigset_t set, oldset;
+      sigfillset(&set);
+      pthread_sigmask(SIG_BLOCK, &set, &oldset);
+      auto GuestRIP = ((ucontext_t*)ucontext)->uc_mcontext.gregs[REG_RAX];
+      //LogMan::Msg::DFmt("Handling deferred signal {} {}", Signal, GuestRIP);
+
+      pending_sig.pending = false;
+      info = &pending_sig.siginfo;
+      ((ucontext_t*)ucontext)->uc_sigmask = pending_sig.uc_sigmask;
+      ThreadState->CurrentFrame->State.rip = GuestRIP;
+
+      auto ok = mprotect((uint8_t*)ThreadState->CurrentFrame - 4096, 4096, PROT_WRITE);
+      LOGMAN_THROW_A_FMT(ok != -1, "mprotect of signal guard failed");
+    }
+  } else if (ThreadState->CurrentFrame->InSyscallInfo == 1) {
+    LOGMAN_THROW_A_FMT(!pending_sig.pending, "Nested signals (in-syscall)");
+    LOGMAN_THROW_A_FMT(info, "needs info");
+    // Context should be stored in memory here, nothing to do
+  } else if (ThreadState->CurrentFrame->InSyscallInfo == 2) {
+    LOGMAN_THROW_A_FMT(!pending_sig.pending, "Nested signals (memcheck)");
+    LOGMAN_THROW_A_FMT(info, "needs info (memcheck)");
+    LOGMAN_THROW_A_FMT(Signal == SIGSEGV, "Expected SIGSEGV here (memcheck)");
     
-    sigset_t set, oldset;
-    sigfillset(&set);
-    pthread_sigmask(SIG_BLOCK, &set, &oldset);
-
-    //LogMan::Msg::DFmt("Deferring signal {}", Signal);
-
-    // store signal info
-    pending_sig.siginfo = *(siginfo_t*)info;
-    pending_sig.handler_sigmask = oldset;
-    pending_sig.uc_sigmask = ((ucontext_t*)ucontext)->uc_sigmask;
-    sigfillset(&((ucontext_t*)ucontext)->uc_sigmask);
-
-    auto ok = mprotect((uint8_t*)ThreadState->CurrentFrame - 4096, 4096, PROT_NONE);
-    LOGMAN_THROW_A_FMT(ok != -1, "mprotect of signal guard failed");
-
-    return true;
-  } else {
-    sigset_t set, oldset;
-    sigfillset(&set);
-    pthread_sigmask(SIG_BLOCK, &set, &oldset);
     auto GuestRIP = ((ucontext_t*)ucontext)->uc_mcontext.gregs[REG_RAX];
-    //LogMan::Msg::DFmt("Handling deferred signal {} {}", Signal, GuestRIP);
-
-    pending_sig.pending = false;
-    info = &pending_sig.siginfo;
-    ((ucontext_t*)ucontext)->uc_sigmask = pending_sig.uc_sigmask;
     ThreadState->CurrentFrame->State.rip = GuestRIP;
-
-    auto ok = mprotect((uint8_t*)ThreadState->CurrentFrame - 4096, 4096, PROT_WRITE);
-    LOGMAN_THROW_A_FMT(ok != -1, "mprotect of signal guard failed");
+  } else {
+    LOGMAN_MSG_A_FMT("Invalid ThreadState->CurrentFrame->InSyscallInfo {}", ThreadState->CurrentFrame->InSyscallInfo);
   }
   
 
-  auto ContextBackup = StoreThreadState(Signal, ucontext);
+  //auto ContextBackup = StoreThreadState(Signal, ucontext);
 
   auto Frame = ThreadState->CurrentFrame;
 
   // Ref count our faults
   // We use this to track if it is safe to clear cache
-  ++SignalHandlerRefCounter;
+  //++SignalHandlerRefCounter;
 
-  uint64_t OldPC = ArchHelpers::Context::GetPc(ucontext);
+  ArchHelpers::Context::SetSp(ucontext, Frame->ReturningStackLocation);
   // Set the new PC
   ArchHelpers::Context::SetPc(ucontext, AbsoluteLoopTopAddressFillSRA);
   // Set our state register to point to our guest thread data
@@ -366,7 +426,7 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
       // We are in jit, SRA must be spilled
       SpillSRA(ucontext, IgnoreMask);
 
-      ContextBackup->Flags |= ArchHelpers::Context::ContextFlags::CONTEXT_FLAG_INJIT;
+      //ContextBackup->Flags |= ArchHelpers::Context::ContextFlags::CONTEXT_FLAG_INJIT;
     } else {
       if (!IsAddressInJITCode(OldPC, true)) {
         // This is likely to cause issues but in some cases it isn't fatal
@@ -409,9 +469,11 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
   siginfo_t *HostSigInfo = reinterpret_cast<siginfo_t*>(info);
 
   // Backup where we think the RIP currently is
-  ContextBackup->OriginalRIP = Frame->State.rip;
+  //ContextBackup->OriginalRIP = Frame->State.rip;
+  auto FaultToTopAndGeneratedException = SynchronousFaultData.FaultToTopAndGeneratedException;
+  SynchronousFaultData.FaultToTopAndGeneratedException = false;
 
-  if (GuestAction->sa_flags & SA_SIGINFO) {
+  /*if (GuestAction->sa_flags & SA_SIGINFO)*/ {
     // Setup ucontext a bit
     if (Is64BitMode) {
       NewGuestSP -= sizeof(FEXCore::x86_64::_libc_fpstate);
@@ -426,12 +488,15 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
       NewGuestSP = AlignDown(NewGuestSP, alignof(siginfo_t));
       uint64_t SigInfoLocation = NewGuestSP;
 
-      ContextBackup->FPStateLocation = FPStateLocation;
-      ContextBackup->UContextLocation = UContextLocation;
-      ContextBackup->SigInfoLocation = SigInfoLocation;
+      //ContextBackup->FPStateLocation = FPStateLocation;
+      //ContextBackup->UContextLocation = UContextLocation;
+      //ContextBackup->SigInfoLocation = SigInfoLocation;
 
       FEXCore::x86_64::ucontext_t *guest_uctx = reinterpret_cast<FEXCore::x86_64::ucontext_t*>(UContextLocation);
       siginfo_t *guest_siginfo = reinterpret_cast<siginfo_t*>(SigInfoLocation);
+
+      // XXX Feels a bit weird here
+      memcpy(&guest_uctx->uc_sigmask, &((ucontext_t*)ucontext)->uc_sigmask, sizeof(guest_uctx->uc_sigmask));
 
       // We have extended float information
       guest_uctx->uc_flags = FEXCore::x86_64::UC_FP_XSTATE;
@@ -449,7 +514,7 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
       // For guest faults we don't have a real way to reconstruct state to a real guest RIP
       *guest_siginfo = *HostSigInfo;
 
-      if (ContextBackup->FaultToTopAndGeneratedException) {
+      if (FaultToTopAndGeneratedException) {
         guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_TRAPNO] = SynchronousFaultData.TrapNo;
         guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_ERR] = SynchronousFaultData.err_code;
 
@@ -506,9 +571,14 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
 
       Frame->State.gregs[X86State::REG_RSI] = SigInfoLocation;
       Frame->State.gregs[X86State::REG_RDX] = UContextLocation;
+
+      NewGuestSP -= 8;
+      *(uint64_t*)NewGuestSP = UContextLocation;
+      NewGuestSP -= 8;
+      *(uint64_t*)NewGuestSP = SigInfoLocation;
     }
     else {
-      ContextBackup->Flags |= ArchHelpers::Context::ContextFlags::CONTEXT_FLAG_32BIT;
+      //ContextBackup->Flags |= ArchHelpers::Context::ContextFlags::CONTEXT_FLAG_32BIT;
 
       NewGuestSP -= sizeof(FEXCore::x86::_libc_fpstate);
       NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86::_libc_fpstate));
@@ -522,12 +592,15 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
       NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86::siginfo_t));
       uint64_t SigInfoLocation = NewGuestSP;
 
-      ContextBackup->FPStateLocation = FPStateLocation;
-      ContextBackup->UContextLocation = UContextLocation;
-      ContextBackup->SigInfoLocation = SigInfoLocation;
+      //ContextBackup->FPStateLocation = FPStateLocation;
+      //ContextBackup->UContextLocation = UContextLocation;
+      //ContextBackup->SigInfoLocation = SigInfoLocation;
 
       FEXCore::x86::ucontext_t *guest_uctx = reinterpret_cast<FEXCore::x86::ucontext_t*>(UContextLocation);
       FEXCore::x86::siginfo_t *guest_siginfo = reinterpret_cast<FEXCore::x86::siginfo_t*>(SigInfoLocation);
+
+      // XXX Feels a bit weird here
+      memcpy(&guest_uctx->uc_sigmask, &((ucontext_t*)ucontext)->uc_sigmask, sizeof(guest_uctx->uc_sigmask));
 
       // We have extended float information
       guest_uctx->uc_flags = FEXCore::x86::UC_FP_XSTATE;
@@ -540,7 +613,7 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
       guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_FS] = Frame->State.fs;
       guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_ES] = Frame->State.es;
       guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_DS] = Frame->State.ds;
-      if (ContextBackup->FaultToTopAndGeneratedException) {
+      if (FaultToTopAndGeneratedException) {
         guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_TRAPNO] = SynchronousFaultData.TrapNo;
         guest_siginfo->si_code = SynchronousFaultData.si_code;
         guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_ERR] = SynchronousFaultData.err_code;
@@ -633,12 +706,28 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
       *(uint32_t*)NewGuestSP = UContextLocation;
       NewGuestSP -= 4;
       *(uint32_t*)NewGuestSP = SigInfoLocation;
-      NewGuestSP -= 4;
-      *(uint32_t*)NewGuestSP = Signal;
-    }
 
-    Frame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.sigaction);
+      if (GuestAction->sa_flags & SA_SIGINFO) {
+        NewGuestSP -= 4;
+        *(uint32_t*)NewGuestSP = UContextLocation;
+        NewGuestSP -= 4;
+        *(uint32_t*)NewGuestSP = SigInfoLocation;
+        NewGuestSP -= 4;
+        *(uint32_t*)NewGuestSP = Signal;
+      } else {
+        NewGuestSP -= 4;
+        *(uint32_t*)NewGuestSP = Signal;
+      }
+    }
   }
+
+  if (GuestAction->sa_flags & SA_SIGINFO) {
+    Frame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.sigaction);
+  } else {
+    Frame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.handler);
+  }
+
+  #if 0
   else {
     if (!Is64BitMode) {
       NewGuestSP -= 4;
@@ -647,6 +736,7 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
 
     Frame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.handler);
   }
+  #endif
 
   if (Is64BitMode) {
     Frame->State.gregs[FEXCore::X86State::REG_RDI] = Signal;
@@ -681,7 +771,7 @@ bool Dispatcher::HandleSIGILL(int Signal, void *info, void *ucontext) {
 
     // Ref count our faults
     // We use this to track if it is safe to clear cache
-    --SignalHandlerRefCounter;
+    //--SignalHandlerRefCounter;
     return true;
   }
 

@@ -25,7 +25,8 @@ public:
 bool SyscallOptimization::Run(IREmitter *IREmit) {
   bool Changed = false;
   auto CurrentIR = IREmit->ViewIR();
-
+  return false; // XXX Disabled for deferred signals
+  
   for (auto [CodeNode, IROp] : CurrentIR.GetAllCode()) {
 
     if (IROp->Op == FEXCore::IR::OP_SYSCALL) {

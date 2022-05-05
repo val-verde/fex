@@ -1214,16 +1214,20 @@ private:
   bool Multiblock{};
   uint64_t Entry;
 
-  OrderedNode* _StoreMemAutoTSO(FEXCore::IR::RegisterClassType Class, uint8_t Size, OrderedNode *Addr, OrderedNode *Value, uint8_t Align = 1) {
-    if (CTX->Config.TSOEnabled)
+  OrderedNode* _StoreMemAutoTSO(uintptr_t RIP, FEXCore::IR::RegisterClassType Class, uint8_t Size, OrderedNode *Addr, OrderedNode *Value, uint8_t Align = 1) {
+    if (CTX->Config.TSOEnabled) {
+      _MemCheck(Addr, RIP, Size, 1);
       return _StoreMemTSO(Class, Size, Value, Addr, Invalid(), Align, MEM_OFFSET_SXTX, 1);
+    }
     else
       return _StoreMem(Class, Size, Value, Addr, Invalid(), Align, MEM_OFFSET_SXTX, 1);
   }
 
-  OrderedNode* _LoadMemAutoTSO(FEXCore::IR::RegisterClassType Class, uint8_t Size, OrderedNode *ssa0, uint8_t Align = 1) {
-    if (CTX->Config.TSOEnabled)
+  OrderedNode* _LoadMemAutoTSO(uintptr_t RIP, FEXCore::IR::RegisterClassType Class, uint8_t Size, OrderedNode *ssa0, uint8_t Align = 1) {
+    if (CTX->Config.TSOEnabled) {
+      _MemCheck(ssa0, RIP, Size, 0);
       return _LoadMemTSO(Class, Size, ssa0, Invalid(), Align, MEM_OFFSET_SXTX, 1);
+    }
     else
       return _LoadMem(Class, Size, ssa0, Invalid(), Align, MEM_OFFSET_SXTX, 1);
   }

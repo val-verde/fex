@@ -260,6 +260,9 @@
       "DeferredSignalCheck i64:$BlockRIP": {
         "HasSideEffects": true
       },
+      "MemCheck GPR:$Ptr, i64:$BlockRIP, u8:#Size, u8:$Write": {
+        "HasSideEffects": true
+      },
       "CallbackReturn": {
         "HasSideEffects": true
       },
@@ -269,7 +272,6 @@
                 ],
         "DestSize": "8"
       },
-
       "GPR = InlineSyscall GPR:$Arg0, GPR:$Arg1, GPR:$Arg2, GPR:$Arg3, GPR:$Arg4, GPR:$Arg5, i32:$HostSyscallNumber, SyscallFlags:$Flags": {
         "HasSideEffects": true,
         "Desc": ["Dispatches a guest syscall directly to the host syscall interface,",

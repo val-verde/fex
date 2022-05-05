@@ -161,6 +161,14 @@ DEF_OP(Syscall) {
   auto Op = IROp->C<IR::IROp_Syscall>();
   // XXX: This is very terrible, but I don't care for right now
 
+  // XXX this is even worse
+
+  mov(byte[STATE + offsetof(FEXCore::Core::CpuStateFrame, InSyscallInfo)], 1);
+
+  // check for any pending signals
+  mov(rax, qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, State.rip)]);
+  mov(byte[STATE-1], 0);
+
   auto NumPush = RA64.size();
 
   for (auto &Reg : RA64)
@@ -188,6 +196,8 @@ DEF_OP(Syscall) {
     sub(rsp, 8); // Align
   // {rdi, rsi, rdx}
   call(qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, Pointers.X86.SyscallHandlerFunc)]);
+
+  mov(byte[STATE + offsetof(FEXCore::Core::CpuStateFrame, InSyscallInfo)], 0);
 
   if (NumPush & 1)
     add(rsp, 8); // Align
@@ -286,6 +296,21 @@ DEF_OP(DeferredSignalCheck) {
   mov(byte[STATE-1], 0);
 }
 
+DEF_OP(MemCheck) {
+  // XXX this is braindead
+  auto Op = IROp->C<IR::IROp_MemCheck>();
+
+  mov(rax, Op->BlockRIP);
+  mov(byte[STATE + offsetof(FEXCore::Core::CpuStateFrame, InSyscallInfo)], 2);
+  if (Op->Write) {
+    // XXX also reads
+    or_(byte[GetSrc<RA_64>(Op->Ptr.ID())], 0);
+  } else {
+    mov(cl, byte[GetSrc<RA_64>(Op->Ptr.ID())]);
+  }
+  mov(byte[STATE + offsetof(FEXCore::Core::CpuStateFrame, InSyscallInfo)], 0);
+}
+
 DEF_OP(CPUID) {
   auto Op = IROp->C<IR::IROp_CPUID>();
 
@@ -337,6 +362,7 @@ void X86JITCore::RegisterBranchHandlers() {
   REGISTER_OP(VALIDATECODE,      ValidateCode);
   REGISTER_OP(REMOVETHREADCODEENTRY,   RemoveThreadCodeEntry);
   REGISTER_OP(DEFERREDSIGNALCHECK,   DeferredSignalCheck);
+  REGISTER_OP(MEMCHECK,   MemCheck);
   REGISTER_OP(CPUID,             CPUID);
 #undef REGISTER_OP
 }

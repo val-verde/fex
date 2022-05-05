@@ -257,6 +257,9 @@
       "SignalReturn": {
         "HasSideEffects": true
       },
+      "DeferredSignalCheck i64:$BlockRIP": {
+        "HasSideEffects": true
+      },
       "CallbackReturn": {
         "HasSideEffects": true
       },

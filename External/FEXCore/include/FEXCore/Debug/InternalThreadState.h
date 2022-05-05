@@ -66,7 +66,7 @@ namespace FEXCore::Core {
   };
 
   struct InternalThreadState {
-    FEXCore::Core::CpuStateFrame* CurrentFrame = &BaseFrameState;
+    FEXCore::Core::CpuStateFrame* CurrentFrame;
 
     struct {
       std::atomic_bool Running {false};
@@ -100,9 +100,6 @@ namespace FEXCore::Core {
     std::shared_ptr<FEXCore::CompileService> CompileService;
     bool IsCompileService{false};
     bool DestroyedByParent{false};  // Should the parent destroy this thread, or it destory itself
-
-    alignas(16) FEXCore::Core::CpuStateFrame BaseFrameState{};
-
   };
   // static_assert(std::is_standard_layout<InternalThreadState>::value, "This needs to be standard layout");
 }

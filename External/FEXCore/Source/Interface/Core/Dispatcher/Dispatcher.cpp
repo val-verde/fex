@@ -273,7 +273,48 @@ static uint32_t ConvertSignalToError(int Signal, siginfo_t *HostSigInfo) {
   return 0;
 }
 
+
 bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, GuestSigAction *GuestAction, stack_t *GuestStack) {
+
+  if (info)
+  {
+    // this is a bit of a hack -- better to modify signal dispatcher
+    LOGMAN_THROW_A_FMT(!pending_sig.pending, "Nested signals");
+    pending_sig.pending = true;
+    
+    sigset_t set, oldset;
+    sigfillset(&set);
+    pthread_sigmask(SIG_BLOCK, &set, &oldset);
+
+    //LogMan::Msg::DFmt("Deferring signal {}", Signal);
+
+    // store signal info
+    pending_sig.siginfo = *(siginfo_t*)info;
+    pending_sig.handler_sigmask = oldset;
+    pending_sig.uc_sigmask = ((ucontext_t*)ucontext)->uc_sigmask;
+    sigfillset(&((ucontext_t*)ucontext)->uc_sigmask);
+
+    auto ok = mprotect((uint8_t*)ThreadState->CurrentFrame - 4096, 4096, PROT_NONE);
+    LOGMAN_THROW_A_FMT(ok != -1, "mprotect of signal guard failed");
+
+    return true;
+  } else {
+    sigset_t set, oldset;
+    sigfillset(&set);
+    pthread_sigmask(SIG_BLOCK, &set, &oldset);
+    auto GuestRIP = ((ucontext_t*)ucontext)->uc_mcontext.gregs[REG_RAX];
+    //LogMan::Msg::DFmt("Handling deferred signal {} {}", Signal, GuestRIP);
+
+    pending_sig.pending = false;
+    info = &pending_sig.siginfo;
+    ((ucontext_t*)ucontext)->uc_sigmask = pending_sig.uc_sigmask;
+    ThreadState->CurrentFrame->State.rip = GuestRIP;
+
+    auto ok = mprotect((uint8_t*)ThreadState->CurrentFrame - 4096, 4096, PROT_WRITE);
+    LOGMAN_THROW_A_FMT(ok != -1, "mprotect of signal guard failed");
+  }
+  
+
   auto ContextBackup = StoreThreadState(Signal, ucontext);
 
   auto Frame = ThreadState->CurrentFrame;

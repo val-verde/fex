@@ -82,6 +82,13 @@ public:
     return Address >= Start && Address < End;
   }
 
+  struct {
+    siginfo_t siginfo;
+    sigset_t uc_sigmask;
+    sigset_t handler_sigmask;
+    bool pending = false;
+  } pending_sig;
+
 protected:
   Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadState *Thread)
     : CTX {ctx}

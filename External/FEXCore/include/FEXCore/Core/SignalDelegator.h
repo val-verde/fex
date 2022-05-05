@@ -75,9 +75,10 @@ namespace Core {
     // 64 is used internally by Valgrind
     constexpr static size_t SIGNAL_FOR_PAUSE {63};
 
+    virtual void HandleGuestSignal(FEXCore::Core::InternalThreadState *Thread, int Signal, void *info, void *ucontext) = 0;
+    
   protected:
     FEXCore::Core::InternalThreadState *GetTLSThread();
-    virtual void HandleGuestSignal(FEXCore::Core::InternalThreadState *Thread, int Signal, void *info, void *ucontext) = 0;
 
     /**
      * @brief Registers an emulated thread's object to a TLS object

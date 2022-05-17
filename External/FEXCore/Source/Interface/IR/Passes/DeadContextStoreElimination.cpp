@@ -8,6 +8,7 @@ $end_info$
 #include "Interface/IR/Passes.h"
 #include "Interface/IR/PassManager.h"
 #include <FEXCore/Core/CoreState.h>
+#include <FEXCore/Core/X86Enums.h>
 
 #include <FEXCore/IR/IR.h>
 #include <FEXCore/IR/IREmitter.h>
@@ -435,10 +436,10 @@ void RCLSE::CalculateControlFlowInfo(FEXCore::IR::IREmitter *IREmit) {
 
 // RSP stores cannot be eliminated for asynchronous signals handling, see FEX_TICKET(1682)
 static bool CanRemoveStore(uint32_t Offset) {
-  constexpr auto RSP_OFFSET = offsetof(Core::CPUState, gregs[X86State::REG_RSP]);
+  constexpr auto RSP_OFFSET = offsetof(FEXCore::Core::CPUState, gregs[FEXCore::X86State::REG_RSP]);
   bool IsRSP = (Offset >= RSP_OFFSET && Offset <= (RSP_OFFSET + 7));
 
-  return !IsRSP
+  return !IsRSP;
 }
 
 /**

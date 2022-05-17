@@ -8,6 +8,7 @@ $end_info$
 #include "Interface/IR/PassManager.h"
 
 #include <FEXCore/Core/CoreState.h>
+#include <FEXCore/Core/X86Enums.h>
 #include <FEXCore/IR/IR.h>
 #include <FEXCore/IR/IREmitter.h>
 #include <FEXCore/IR/IntrusiveIRList.h>
@@ -127,6 +128,13 @@ struct Info {
   FPRInfo fpr;
 };
 
+// RSP stores cannot be eliminated for asynchronous signals handling, see FEX_TICKET(1682)
+static bool CanRemoveGPRStore(uint32_t Offset) {
+  constexpr auto RSP_OFFSET = offsetof(Core::CPUState, gregs[X86State::REG_RSP]);
+  bool IsRSP = (Offset >= RSP_OFFSET && Offset <= (RSP_OFFSET + 7));
+
+  return !IsRSP
+}
 
 /**
  * @brief This is a temporary pass to detect simple multiblock dead flag/gpr/fpr stores
@@ -322,7 +330,7 @@ bool DeadStoreElimination::Run(IREmitter *IREmit) {
 
           //// GPRs ////
           // If this OP_STORECONTEXT is never read, remove it
-          if (BlockInfo.gpr.kill & GPRBit(Op->Offset)) {
+          if ((BlockInfo.gpr.kill & GPRBit(Op->Offset)) && CanRemoveGPRStore(Op->Offset)) {
             IREmit->Remove(CodeNode);
             Changed = true;
           }

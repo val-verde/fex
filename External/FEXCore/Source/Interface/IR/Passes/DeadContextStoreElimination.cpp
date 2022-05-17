@@ -432,6 +432,15 @@ void RCLSE::CalculateControlFlowInfo(FEXCore::IR::IREmitter *IREmit) {
   }
 }
 
+
+// RSP stores cannot be eliminated for asynchronous signals handling, see FEX_TICKET(1682)
+static bool CanRemoveStore(uint32_t Offset) {
+  constexpr auto RSP_OFFSET = offsetof(Core::CPUState, gregs[X86State::REG_RSP]);
+  bool IsRSP = (Offset >= RSP_OFFSET && Offset <= (RSP_OFFSET + 7));
+
+  return !IsRSP
+}
+
 /**
  * @brief This pass removes redundant pairs of storecontext and loadcontext ops
  *
@@ -499,7 +508,8 @@ bool RCLSE::RedundantStoreLoadElimination(FEXCore::IR::IREmitter *IREmit) {
         if (IsWriteAccess(LastAccess) &&
             LastClass == Op->Class &&
             LastOffset == Op->Offset &&
-            LastSize <= IROp->Size) {
+            LastSize <= IROp->Size && 
+            CanRemoveStore(LastOffset)) {
           // Remove the last store because this one overwrites it entirely
           // Happens when we store in to a location then store again
           IREmit->Remove(LastStoreNode);

@@ -365,12 +365,6 @@ X86Dispatcher::X86Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::Inte
   }
 
   {
-    // Signal return handler
-    SignalHandlerReturnAddress = getCurr<uint64_t>();
-    ud2();
-  }
-
-  {
     // Guest SIGILL handler
     // Needs to be distinct from the SignalHandlerReturnAddress
     UnimplementedInstructionAddress = getCurr<uint64_t>();
@@ -440,7 +434,6 @@ X86Dispatcher::X86Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::Inte
     Pointers.ThreadPauseHandler = ThreadPauseHandlerAddress;
     Pointers.UnimplementedInstructionHandler = UnimplementedInstructionAddress;
     Pointers.OverflowExceptionHandler = OverflowExceptionInstructionAddress;
-    Pointers.SignalReturnHandler = SignalHandlerReturnAddress;
     Pointers.L1Pointer = Thread->LookupCache->GetL1Pointer();
   }
 }

@@ -332,7 +332,6 @@ private:
   ///< Branch ops
   DEF_OP(GuestCallDirect);
   DEF_OP(GuestCallIndirect);
-  DEF_OP(SignalReturn);
   DEF_OP(CallbackReturn);
   DEF_OP(ExitFunction);
   DEF_OP(Jump);

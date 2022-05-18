@@ -319,14 +319,6 @@ Arm64Dispatcher::Arm64Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::
   }
 
   {
-    SignalHandlerReturnAddress = GetCursorAddress<uint64_t>();
-
-    // Now to get back to our old location we need to do a fault dance
-    // We can't use SIGTRAP here since gdb catches it and never gives it to the application!
-    hlt(0);
-  }
-
-  {
     // Guest SIGILL handler
     // Needs to be distinct from the SignalHandlerReturnAddress
     UnimplementedInstructionAddress = GetCursorAddress<uint64_t>();
@@ -550,7 +542,6 @@ Arm64Dispatcher::Arm64Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::
     Pointers.ThreadPauseHandlerSpillSRA = ThreadPauseHandlerAddressSpillSRA;
     Pointers.UnimplementedInstructionHandler = UnimplementedInstructionAddress;
     Pointers.OverflowExceptionHandler = OverflowExceptionInstructionAddress;
-    Pointers.SignalReturnHandler = SignalHandlerReturnAddress;
     Pointers.L1Pointer = Thread->LookupCache->GetL1Pointer();
     Pointers.LUDIVHandler = LUDIVHandler;
     Pointers.LDIVHandler = LDIVHandler;

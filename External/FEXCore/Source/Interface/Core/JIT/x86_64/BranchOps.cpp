@@ -37,15 +37,6 @@ DEF_OP(GuestCallIndirect) {
   LogMan::Msg::DFmt("Unimplemented");
 }
 
-DEF_OP(SignalReturn) {
-  // Adjust the stack first for a regular return
-  if (SpillSlots) {
-    add(rsp, SpillSlots * 16); // + 8 to consume return address
-  }
-
-  jmp(qword [STATE + offsetof(FEXCore::Core::CpuStateFrame, Pointers.X86.SignalReturnHandler)]);
-}
-
 DEF_OP(CallbackReturn) {
   // Adjust the stack first for a regular return
   if (SpillSlots) {
@@ -322,7 +313,6 @@ void X86JITCore::RegisterBranchHandlers() {
 #define REGISTER_OP(op, x) OpHandlers[FEXCore::IR::IROps::OP_##op] = &X86JITCore::Op_##x
   REGISTER_OP(GUESTCALLDIRECT,   GuestCallDirect);
   REGISTER_OP(GUESTCALLINDIRECT, GuestCallIndirect);
-  REGISTER_OP(SIGNALRETURN,      SignalReturn);
   REGISTER_OP(CALLBACKRETURN,    CallbackReturn);
   REGISTER_OP(EXITFUNCTION,      ExitFunction);
   REGISTER_OP(JUMP,              Jump);

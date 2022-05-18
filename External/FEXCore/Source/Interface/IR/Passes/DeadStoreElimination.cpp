@@ -133,7 +133,7 @@ static bool CanRemoveGPRStore(uint32_t Offset) {
   constexpr auto RSP_OFFSET = offsetof(Core::CPUState, gregs[X86State::REG_RSP]);
   bool IsRSP = (Offset >= RSP_OFFSET && Offset <= (RSP_OFFSET + 7));
 
-  return !IsRSP
+  return !IsRSP;
 }
 
 /**

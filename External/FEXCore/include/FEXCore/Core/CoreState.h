@@ -121,7 +121,6 @@ namespace FEXCore::Core {
       uint64_t ThreadPauseHandlerSpillSRA{};
       uint64_t UnimplementedInstructionHandler{};
       uint64_t OverflowExceptionHandler{};
-      uint64_t SignalReturnHandler{};
       uint64_t L1Pointer{};
       uint64_t LUDIVHandler{};
       uint64_t LDIVHandler{};
@@ -154,7 +153,6 @@ namespace FEXCore::Core {
       uint64_t ThreadPauseHandler{};
       uint64_t UnimplementedInstructionHandler{};
       uint64_t OverflowExceptionHandler{};
-      uint64_t SignalReturnHandler{};
       uint64_t L1Pointer{};
       /**  @} */
     } X86;

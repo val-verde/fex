@@ -16,13 +16,7 @@ $end_info$
 #include <unistd.h>
 
 namespace FEXCore::CPU {
-[[noreturn]]
-static void SignalReturn(FEXCore::Core::InternalThreadState *Thread) {
-  Thread->CTX->SignalThread(Thread, FEXCore::Core::SignalEvent::Return);
 
-  LOGMAN_MSG_A_FMT("unreachable");
-  FEX_UNREACHABLE;
-}
 
 #define DEF_OP(x) void InterpreterOps::Op_##x(IR::IROp_Header *IROp, IROpData *Data, IR::NodeID Node)
 DEF_OP(GuestCallDirect) {
@@ -31,10 +25,6 @@ DEF_OP(GuestCallDirect) {
 
 DEF_OP(GuestCallIndirect) {
   LogMan::Msg::DFmt("Unimplemented");
-}
-
-DEF_OP(SignalReturn) {
-  SignalReturn(Data->State);
 }
 
 DEF_OP(CallbackReturn) {

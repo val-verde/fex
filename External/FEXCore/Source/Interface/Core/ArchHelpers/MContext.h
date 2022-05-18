@@ -33,7 +33,9 @@ struct X86ContextBackup {
   uint64_t FPStateLocation;
   uint64_t UContextLocation;
   uint64_t SigInfoLocation;
-  FEXCore::Core::CPUState GuestState;
+  uint64_t HostStackStart;
+  uint64_t HostStackSize;
+
   static constexpr int RedZoneSize = 128;
 };
 
@@ -56,9 +58,10 @@ struct ArmContextBackup {
   uint64_t FPStateLocation;
   uint64_t UContextLocation;
   uint64_t SigInfoLocation;
-  FEXCore::Core::CPUState GuestState;
+  uint64_t HostStackStart;
+  uint64_t HostStackSize;
 
-  // Arm64 doesn't have a red zone
+    // Arm64 doesn't have a red zone
   static constexpr int RedZoneSize = 0;
 };
 

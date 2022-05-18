@@ -47,7 +47,7 @@ public:
   uint64_t ThreadPauseHandlerAddress{};
   uint64_t ThreadPauseHandlerAddressSpillSRA{};
   uint64_t ExitFunctionLinkerAddress{};
-  uint64_t SignalHandlerReturnAddress{};
+
   uint64_t UnimplementedInstructionAddress{};
   uint64_t OverflowExceptionInstructionAddress{};
 
@@ -87,8 +87,9 @@ protected:
     : CTX {ctx}
     , ThreadState {Thread} {}
 
-  ArchHelpers::Context::ContextBackup* StoreThreadState(int Signal, void *ucontext);
-  void RestoreThreadState(void *ucontext);
+  ArchHelpers::Context::ContextBackup *StoreThreadState(int Signal, void *ucontext, uint64_t *GuestRSP);
+  void RestoreThreadState(void *ucontext, ArchHelpers::Context::ContextBackup * Context);
+
   std::stack<uint64_t, std::vector<uint64_t>> SignalFrames;
 
   bool SRAEnabled = false;

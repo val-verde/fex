@@ -47,7 +47,6 @@ public:
   uint64_t ThreadPauseHandlerAddress{};
   uint64_t ThreadPauseHandlerAddressSpillSRA{};
   uint64_t ExitFunctionLinkerAddress{};
-
   uint64_t UnimplementedInstructionAddress{};
   uint64_t OverflowExceptionInstructionAddress{};
 
@@ -81,6 +80,8 @@ public:
   bool IsAddressInDispatcher(uint64_t Address) const {
     return Address >= Start && Address < End;
   }
+
+  void SigRet(FEXCore::Core::CpuStateFrame *Frame);
 
 protected:
   Dispatcher(FEXCore::Context::Context *ctx, FEXCore::Core::InternalThreadState *Thread)

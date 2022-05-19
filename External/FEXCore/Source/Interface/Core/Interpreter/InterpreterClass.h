@@ -40,6 +40,10 @@ public:
 
   bool NeedsRetainedIRCopy() const override { return true; }
 
+  void SigRet(FEXCore::Core::CpuStateFrame *Frame) override {
+    Dispatcher->SigRet(Frame);
+  }
+
 private:
   FEXCore::Context::Context *CTX;
   FEXCore::Core::InternalThreadState *State;

@@ -1212,4 +1212,8 @@ namespace FEXCore::Context {
     Thread->FrontendDecoder->SetExternalBranches(ExternalBranches);
     Thread->FrontendDecoder->SetSectionMaxAddress(SectionMaxAddress);
   }
+
+  void SigRet(FEXCore::Core::CpuStateFrame *Frame) {
+    Frame->Thread->CPUBackend->SigRet(Frame);
+  }
 }

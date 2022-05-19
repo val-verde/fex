@@ -19,6 +19,7 @@ namespace FEXCore {
 namespace FEXCore::Core {
   struct CPUState;
   struct InternalThreadState;
+  struct CpuStateFrame;
 }
 
 namespace FEXCore::CPU {
@@ -252,4 +253,6 @@ namespace FEXCore::Context {
   FEX_DEFAULT_VISIBILITY void InvalidateGuestCodeRange(FEXCore::Context::Context *CTX, uint64_t Start, uint64_t Length);
 
   FEX_DEFAULT_VISIBILITY void ConfigureAOTGen(FEXCore::Core::InternalThreadState *Thread, std::set<uint64_t> *ExternalBranches, uint64_t SectionMaxAddress);
+
+  FEX_DEFAULT_VISIBILITY void SigRet(FEXCore::Core::CpuStateFrame *Frame);  
 }

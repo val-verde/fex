@@ -43,6 +43,8 @@ namespace HostFactory {
     bool NeedsOpDispatch() override { return false; }
 
     bool HandleSIGSEGV(FEXCore::Core::InternalThreadState *Thread, int Signal, void *info, void *ucontext);
+    
+    void SigRet(FEXCore::Core::CpuStateFrame *Frame) override { }
 
   private:
     FEX_CONFIG_OPT(Is64BitMode, IS64BIT_MODE);

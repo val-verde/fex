@@ -82,6 +82,10 @@ public:
     return Dispatcher->IsAddressInJITCode(Address, IncludeDispatcher);
   }
 
+  void SigRet(FEXCore::Core::CpuStateFrame *Frame) override {
+    Dispatcher->SigRet(Frame);
+  }
+
   static void InitializeSignalHandlers(FEXCore::Context::Context *CTX);
 
   void ClearRelocations() override { Relocations.clear(); }

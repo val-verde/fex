@@ -47,6 +47,8 @@ namespace FEX::HLE {
 
       uint64_t RegisterGuestSigAltStack(const stack_t *ss, stack_t *old_ss);
 
+      uint64_t GuestSigNotifyMask(void *pset) override;
+
       uint64_t GuestSigProcMask(int how, const uint64_t *set, uint64_t *oldset);
       uint64_t GuestSigPending(uint64_t *set, size_t sigsetsize);
       uint64_t GuestSigSuspend(uint64_t *set, size_t sigsetsize);

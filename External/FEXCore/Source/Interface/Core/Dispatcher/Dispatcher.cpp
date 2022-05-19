@@ -39,7 +39,7 @@ void Dispatcher::SleepThread(FEXCore::Context::Context *ctx, FEXCore::Core::CpuS
   ctx->IdleWaitCV.notify_all();
 }
 
-ArchHelpers::Context::ContextBackup* Dispatcher::StoreThreadState(int Signal, void *ucontext, uint64_t *GuestRSP) {
+ArchHelpers::Context::ContextBackup *Dispatcher::StoreThreadState(int Signal, void *ucontext, uint64_t *GuestRSP) {
   // We can end up getting a signal at any point in our host state
   // Jump to a handler that saves all state so we can safely return
   uintptr_t NewGuestSP = *GuestRSP;
@@ -68,13 +68,11 @@ ArchHelpers::Context::ContextBackup* Dispatcher::StoreThreadState(int Signal, vo
   return Context;
 }
 
-void Dispatcher::RestoreThreadState(void *ucontext, ArchHelpers::Context::ContextBackup* Context) {
+void doRestoreThreadState(FEXCore::Core::CpuStateFrame *Frame, void *ucontext, ArchHelpers::Context::ContextBackup* Context, uint64_t AbsoluteLoopTopAddressFillSRA) {
 
   ArchHelpers::Context::RestoreContext(ucontext, Context);
 
   if (Context->UContextLocation) {
-    auto Frame = ThreadState->CurrentFrame;
-
     if (Context->Flags &ArchHelpers::Context::ContextFlags::CONTEXT_FLAG_INJIT) {
       // XXX: Unsupported since it needs state reconstruction
       // If we are in the JIT then SRA might need to be restored to values from the context
@@ -89,10 +87,12 @@ void Dispatcher::RestoreThreadState(void *ucontext, ArchHelpers::Context::Contex
       if (Context->OriginalRIP != guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_RIP] ||
           Context->FaultToTopAndGeneratedException) {
         // Hack! Go back to the top of the dispatcher top
+        //FEX_TODO("thunk error handling here")
         // This is only safe inside the JIT rather than anything outside of it
         ArchHelpers::Context::SetPc(ucontext, AbsoluteLoopTopAddressFillSRA);
         // Set our state register to point to our guest thread data
         ArchHelpers::Context::SetState(ucontext, reinterpret_cast<uint64_t>(Frame));
+        ArchHelpers::Context::SetSp(ucontext, Frame->ReturningStackLocation);
       }
 
       // Restore from mcontext
@@ -140,6 +140,10 @@ void Dispatcher::RestoreThreadState(void *ucontext, ArchHelpers::Context::Contex
       Frame->State.flags[FEXCore::X86State::X87FLAG_C2_LOC] = (fpstate->fsw >> 10) & 1;
       Frame->State.flags[FEXCore::X86State::X87FLAG_C3_LOC] = (fpstate->fsw >> 14) & 1;
       Frame->State.flags[FEXCore::X86State::X87FLAG_TOP_LOC] = (fpstate->fsw >> 11) & 0b111;
+
+      // Tell signal delegator about this
+      memcpy(&(((ucontext_t*)ucontext)->uc_sigmask), &guest_uctx->uc_sigmask, sizeof(guest_uctx->uc_sigmask));
+      Frame->Thread->CTX->SignalDelegation->GuestSigNotifyMask(&(((ucontext_t*)ucontext)->uc_sigmask));
     }
     else {
       auto *guest_uctx = reinterpret_cast<FEXCore::x86::ucontext_t*>(Context->UContextLocation);
@@ -152,6 +156,8 @@ void Dispatcher::RestoreThreadState(void *ucontext, ArchHelpers::Context::Contex
         ArchHelpers::Context::SetPc(ucontext, AbsoluteLoopTopAddressFillSRA);
         // Set our state register to point to our guest thread data
         ArchHelpers::Context::SetState(ucontext, reinterpret_cast<uint64_t>(Frame));
+        //FEX_TODO("Thunk longjump")
+        ArchHelpers::Context::SetSp(ucontext, Frame->ReturningStackLocation);
 
       }
       // XXX: Full context setting
@@ -203,6 +209,10 @@ void Dispatcher::RestoreThreadState(void *ucontext, ArchHelpers::Context::Contex
       Frame->State.flags[FEXCore::X86State::X87FLAG_C2_LOC] = (fpstate->fsw >> 10) & 1;
       Frame->State.flags[FEXCore::X86State::X87FLAG_C3_LOC] = (fpstate->fsw >> 14) & 1;
       Frame->State.flags[FEXCore::X86State::X87FLAG_TOP_LOC] = (fpstate->fsw >> 11) & 0b111;
+
+      // Tell signal delegator about this
+      memcpy(&(((ucontext_t*)ucontext)->uc_sigmask), &guest_uctx->uc_sigmask, sizeof(guest_uctx->uc_sigmask));
+      Frame->Thread->CTX->SignalDelegation->GuestSigNotifyMask(&(((ucontext_t*)ucontext)->uc_sigmask));
     }
   }
 }
@@ -334,7 +344,7 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
   NewGuestSP -= HostStackSize;
 
   auto HostStackStart = NewGuestSP;
-  memcpy((void*)HostStackStart, (void*)Frame->ReturningStackLocation, HostStackSize);
+  memcpy((void*)HostStackStart, (void*)(Frame->ReturningStackLocation - HostStackSize), HostStackSize);
 
   // Backup host context in guest stack
   auto ContextBackup = StoreThreadState(Signal, ucontext, &NewGuestSP);
@@ -357,266 +367,268 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
   // Backup where we think the RIP currently is
   ContextBackup->OriginalRIP = Frame->State.rip;
 
-  if (GuestAction->sa_flags & SA_SIGINFO) {
-    // Setup ucontext a bit
-    if (Is64BitMode) {
-      NewGuestSP -= sizeof(FEXCore::x86_64::_libc_fpstate);
-      NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86_64::_libc_fpstate));
-      uint64_t FPStateLocation = NewGuestSP;
+  // Setup ucontext a bit
+  if (Is64BitMode) {
+    NewGuestSP -= sizeof(FEXCore::x86_64::_libc_fpstate);
+    NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86_64::_libc_fpstate));
+    uint64_t FPStateLocation = NewGuestSP;
 
-      NewGuestSP -= sizeof(FEXCore::x86_64::ucontext_t);
-      NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86_64::ucontext_t));
-      uint64_t UContextLocation = NewGuestSP;
+    NewGuestSP -= sizeof(FEXCore::x86_64::ucontext_t);
+    NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86_64::ucontext_t));
+    uint64_t UContextLocation = NewGuestSP;
 
-      //FEX_TODO("Do this in a nicer way")
-      // *HACK* Put our Context Backup pointer right before the ucontext
-      NewGuestSP -= 8;
-      *(void**)NewGuestSP = ContextBackup;
+    NewGuestSP -= sizeof(siginfo_t);
+    NewGuestSP = AlignDown(NewGuestSP, alignof(siginfo_t));
+    uint64_t SigInfoLocation = NewGuestSP;
 
-      NewGuestSP -= sizeof(siginfo_t);
-      NewGuestSP = AlignDown(NewGuestSP, alignof(siginfo_t));
-      uint64_t SigInfoLocation = NewGuestSP;
+    ContextBackup->FPStateLocation = FPStateLocation;
+    ContextBackup->UContextLocation = UContextLocation;
+    ContextBackup->SigInfoLocation = SigInfoLocation;
 
-      ContextBackup->FPStateLocation = FPStateLocation;
-      ContextBackup->UContextLocation = UContextLocation;
-      ContextBackup->SigInfoLocation = SigInfoLocation;
+    FEXCore::x86_64::ucontext_t *guest_uctx = reinterpret_cast<FEXCore::x86_64::ucontext_t*>(UContextLocation);
+    siginfo_t *guest_siginfo = reinterpret_cast<siginfo_t*>(SigInfoLocation);
 
-      FEXCore::x86_64::ucontext_t *guest_uctx = reinterpret_cast<FEXCore::x86_64::ucontext_t*>(UContextLocation);
-      siginfo_t *guest_siginfo = reinterpret_cast<siginfo_t*>(SigInfoLocation);
+    // We have extended float information
+    guest_uctx->uc_flags = FEXCore::x86_64::UC_FP_XSTATE;
 
-      // We have extended float information
-      guest_uctx->uc_flags = FEXCore::x86_64::UC_FP_XSTATE;
+    // Pointer to where the fpreg memory is
+    guest_uctx->uc_mcontext.fpregs = reinterpret_cast<FEXCore::x86_64::_libc_fpstate*>(FPStateLocation);
+    FEXCore::x86_64::_libc_fpstate *fpstate = reinterpret_cast<FEXCore::x86_64::_libc_fpstate*>(FPStateLocation);
 
-      // Pointer to where the fpreg memory is
-      guest_uctx->uc_mcontext.fpregs = reinterpret_cast<FEXCore::x86_64::_libc_fpstate*>(FPStateLocation);
-      FEXCore::x86_64::_libc_fpstate *fpstate = reinterpret_cast<FEXCore::x86_64::_libc_fpstate*>(FPStateLocation);
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_RIP] = Frame->State.rip;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_EFL] = 0;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_CSGSFS] = 0;
 
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_RIP] = Frame->State.rip;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_EFL] = 0;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_CSGSFS] = 0;
+    // aarch64 and x86_64 siginfo_t matches. We can just copy this over
+    // SI_USER could also potentially have random data in it, needs to be bit perfect
+    // For guest faults we don't have a real way to reconstruct state to a real guest RIP
+    *guest_siginfo = *HostSigInfo;
 
-      // aarch64 and x86_64 siginfo_t matches. We can just copy this over
-      // SI_USER could also potentially have random data in it, needs to be bit perfect
-      // For guest faults we don't have a real way to reconstruct state to a real guest RIP
-      *guest_siginfo = *HostSigInfo;
+    if (ContextBackup->FaultToTopAndGeneratedException) {
+      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_TRAPNO] = SynchronousFaultData.TrapNo;
+      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_ERR] = SynchronousFaultData.err_code;
 
-      if (ContextBackup->FaultToTopAndGeneratedException) {
-        guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_TRAPNO] = SynchronousFaultData.TrapNo;
-        guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_ERR] = SynchronousFaultData.err_code;
-
-        // Overwrite si_code
-        guest_siginfo->si_code = SynchronousFaultData.si_code;
-      }
-      else {
-        guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_TRAPNO] = ConvertSignalToTrapNo(Signal, HostSigInfo);
-        guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_ERR] = ConvertSignalToError(Signal, HostSigInfo);
-      }
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_OLDMASK] = 0;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_CR2] = 0;
-
-#define COPY_REG(x) \
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_##x] = Frame->State.gregs[X86State::REG_##x];
-      COPY_REG(R8);
-      COPY_REG(R9);
-      COPY_REG(R10);
-      COPY_REG(R11);
-      COPY_REG(R12);
-      COPY_REG(R13);
-      COPY_REG(R14);
-      COPY_REG(R15);
-      COPY_REG(RDI);
-      COPY_REG(RSI);
-      COPY_REG(RBP);
-      COPY_REG(RBX);
-      COPY_REG(RDX);
-      COPY_REG(RAX);
-      COPY_REG(RCX);
-      COPY_REG(RSP);
-#undef COPY_REG
-
-      // Copy float registers
-      memcpy(fpstate->_st, Frame->State.mm, sizeof(Frame->State.mm));
-      memcpy(fpstate->_xmm, Frame->State.xmm, sizeof(Frame->State.xmm));
-
-      // FCW store default
-      fpstate->fcw = Frame->State.FCW;
-      fpstate->ftw = Frame->State.FTW;
-
-      // Reconstruct FSW
-      fpstate->fsw =
-        (Frame->State.flags[FEXCore::X86State::X87FLAG_TOP_LOC] << 11) |
-        (Frame->State.flags[FEXCore::X86State::X87FLAG_C0_LOC] << 8) |
-        (Frame->State.flags[FEXCore::X86State::X87FLAG_C1_LOC] << 9) |
-        (Frame->State.flags[FEXCore::X86State::X87FLAG_C2_LOC] << 10) |
-        (Frame->State.flags[FEXCore::X86State::X87FLAG_C3_LOC] << 14);
-
-      // Copy over signal stack information
-      guest_uctx->uc_stack.ss_flags = GuestStack->ss_flags;
-      guest_uctx->uc_stack.ss_sp = GuestStack->ss_sp;
-      guest_uctx->uc_stack.ss_size = GuestStack->ss_size;
-
-      Frame->State.gregs[X86State::REG_RSI] = SigInfoLocation;
-      Frame->State.gregs[X86State::REG_RDX] = UContextLocation;
+      // Overwrite si_code
+      guest_siginfo->si_code = SynchronousFaultData.si_code;
     }
     else {
-      ContextBackup->Flags |= ArchHelpers::Context::ContextFlags::CONTEXT_FLAG_32BIT;
-
-      NewGuestSP -= sizeof(FEXCore::x86::_libc_fpstate);
-      NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86::_libc_fpstate));
-      uint64_t FPStateLocation = NewGuestSP;
-
-      NewGuestSP -= sizeof(FEXCore::x86::ucontext_t);
-      NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86::ucontext_t));
-      uint64_t UContextLocation = NewGuestSP;
-
-      //FEX_TODO("Do this in a nicer way")
-      // *HACK* Put our Context Backup pointer right before the ucontext
-      NewGuestSP -= 8;
-      *(void**)NewGuestSP = ContextBackup;
-
-      NewGuestSP -= sizeof(FEXCore::x86::siginfo_t);
-      NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86::siginfo_t));
-      uint64_t SigInfoLocation = NewGuestSP;
-
-      ContextBackup->FPStateLocation = FPStateLocation;
-      ContextBackup->UContextLocation = UContextLocation;
-      ContextBackup->SigInfoLocation = SigInfoLocation;
-
-      FEXCore::x86::ucontext_t *guest_uctx = reinterpret_cast<FEXCore::x86::ucontext_t*>(UContextLocation);
-      FEXCore::x86::siginfo_t *guest_siginfo = reinterpret_cast<FEXCore::x86::siginfo_t*>(SigInfoLocation);
-
-      // We have extended float information
-      guest_uctx->uc_flags = FEXCore::x86::UC_FP_XSTATE;
-
-      // Pointer to where the fpreg memory is
-      guest_uctx->uc_mcontext.fpregs = static_cast<uint32_t>(FPStateLocation);
-      FEXCore::x86::_libc_fpstate *fpstate = reinterpret_cast<FEXCore::x86::_libc_fpstate*>(FPStateLocation);
-
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_GS] = Frame->State.gs;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_FS] = Frame->State.fs;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_ES] = Frame->State.es;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_DS] = Frame->State.ds;
-      if (ContextBackup->FaultToTopAndGeneratedException) {
-        guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_TRAPNO] = SynchronousFaultData.TrapNo;
-        guest_siginfo->si_code = SynchronousFaultData.si_code;
-        guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_ERR] = SynchronousFaultData.err_code;
-      }
-      else {
-        guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_TRAPNO] = ConvertSignalToTrapNo(Signal, HostSigInfo);
-        guest_siginfo->si_code = HostSigInfo->si_code;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_ERR] = ConvertSignalToError(Signal, HostSigInfo);
-      }
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_EIP] = Frame->State.rip;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_CS] = Frame->State.cs;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_EFL] = 0;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_UESP] = 0;
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_SS] = Frame->State.ss;
+      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_TRAPNO] = ConvertSignalToTrapNo(Signal, HostSigInfo);
+      guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_ERR] = ConvertSignalToError(Signal, HostSigInfo);
+    }
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_OLDMASK] = 0;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_CR2] = 0;
 
 #define COPY_REG(x) \
-      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_##x] = Frame->State.gregs[X86State::REG_##x];
-      COPY_REG(RDI);
-      COPY_REG(RSI);
-      COPY_REG(RBP);
-      COPY_REG(RBX);
-      COPY_REG(RDX);
-      COPY_REG(RAX);
-      COPY_REG(RCX);
-      COPY_REG(RSP);
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86_64::FEX_REG_##x] = Frame->State.gregs[X86State::REG_##x];
+    COPY_REG(R8);
+    COPY_REG(R9);
+    COPY_REG(R10);
+    COPY_REG(R11);
+    COPY_REG(R12);
+    COPY_REG(R13);
+    COPY_REG(R14);
+    COPY_REG(R15);
+    COPY_REG(RDI);
+    COPY_REG(RSI);
+    COPY_REG(RBP);
+    COPY_REG(RBX);
+    COPY_REG(RDX);
+    COPY_REG(RAX);
+    COPY_REG(RCX);
+    COPY_REG(RSP);
 #undef COPY_REG
 
-      // Copy float registers
-      for (size_t i = 0; i < 8; ++i) {
-        // 32-bit st register size is only 10 bytes. Not padded to 16byte like x86-64
-        memcpy(&fpstate->_st[i], &Frame->State.mm[i], 10);
-      }
+    // Copy float registers
+    memcpy(fpstate->_st, Frame->State.mm, sizeof(Frame->State.mm));
+    memcpy(fpstate->_xmm, Frame->State.xmm, sizeof(Frame->State.xmm));
 
-      // Extended XMM state
-      fpstate->status = FEXCore::x86::fpstate_magic::MAGIC_XFPSTATE;
-      memcpy(fpstate->_xmm, Frame->State.xmm, sizeof(Frame->State.xmm));
+    // FCW store default
+    fpstate->fcw = Frame->State.FCW;
+    fpstate->ftw = Frame->State.FTW;
 
-      // FCW store default
-      fpstate->fcw = Frame->State.FCW;
-      fpstate->ftw = Frame->State.FTW;
-      // Reconstruct FSW
-      fpstate->fsw =
-        (Frame->State.flags[FEXCore::X86State::X87FLAG_TOP_LOC] << 11) |
-        (Frame->State.flags[FEXCore::X86State::X87FLAG_C0_LOC] << 8) |
-        (Frame->State.flags[FEXCore::X86State::X87FLAG_C1_LOC] << 9) |
-        (Frame->State.flags[FEXCore::X86State::X87FLAG_C2_LOC] << 10) |
-        (Frame->State.flags[FEXCore::X86State::X87FLAG_C3_LOC] << 14);
+    // Reconstruct FSW
+    fpstate->fsw =
+      (Frame->State.flags[FEXCore::X86State::X87FLAG_TOP_LOC] << 11) |
+      (Frame->State.flags[FEXCore::X86State::X87FLAG_C0_LOC] << 8) |
+      (Frame->State.flags[FEXCore::X86State::X87FLAG_C1_LOC] << 9) |
+      (Frame->State.flags[FEXCore::X86State::X87FLAG_C2_LOC] << 10) |
+      (Frame->State.flags[FEXCore::X86State::X87FLAG_C3_LOC] << 14);
 
-      // Copy over signal stack information
-      guest_uctx->uc_stack.ss_flags = GuestStack->ss_flags;
-      guest_uctx->uc_stack.ss_sp = static_cast<uint32_t>(reinterpret_cast<uint64_t>(GuestStack->ss_sp));
-      guest_uctx->uc_stack.ss_size = GuestStack->ss_size;
-
-      // These three elements are in every siginfo
-      guest_siginfo->si_signo = HostSigInfo->si_signo;
-      guest_siginfo->si_errno = HostSigInfo->si_errno;
-
-      switch (Signal) {
-        case SIGSEGV:
-        case SIGBUS:
-          // Macro expansion to get the si_addr
-          // This is the address trying to be accessed, not the RIP
-          guest_siginfo->_sifields._sigfault.addr = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(HostSigInfo->si_addr));
-          break;
-        case SIGFPE:
-        case SIGILL:
-          // Macro expansion to get the si_addr
-          // Can't really give a real result here. Pull from the context for now
-          guest_siginfo->_sifields._sigfault.addr = Frame->State.rip;
-          break;
-        case SIGCHLD:
-          guest_siginfo->_sifields._sigchld.pid = HostSigInfo->si_pid;
-          guest_siginfo->_sifields._sigchld.uid = HostSigInfo->si_uid;
-          guest_siginfo->_sifields._sigchld.status = HostSigInfo->si_status;
-          guest_siginfo->_sifields._sigchld.utime = HostSigInfo->si_utime;
-          guest_siginfo->_sifields._sigchld.stime = HostSigInfo->si_stime;
-          break;
-        case SIGALRM:
-        case SIGVTALRM:
-          guest_siginfo->_sifields._timer.tid = HostSigInfo->si_timerid;
-          guest_siginfo->_sifields._timer.overrun = HostSigInfo->si_overrun;
-          guest_siginfo->_sifields._timer.sigval.sival_int = HostSigInfo->si_int;
-          break;
-        default:
-          LogMan::Msg::EFmt("Unhandled siginfo_t for signal: {}\n", Signal);
-          break;
-      }
-
-      NewGuestSP -= 4;
-      *(uint32_t*)NewGuestSP = UContextLocation;
-      NewGuestSP -= 4;
-      *(uint32_t*)NewGuestSP = SigInfoLocation;
-      NewGuestSP -= 4;
-      *(uint32_t*)NewGuestSP = Signal;
-    }
-
-    Frame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.sigaction);
+    // Copy over signal stack information
+    guest_uctx->uc_stack.ss_flags = GuestStack->ss_flags;
+    guest_uctx->uc_stack.ss_sp = GuestStack->ss_sp;
+    guest_uctx->uc_stack.ss_size = GuestStack->ss_size;
   }
   else {
-    if (!Is64BitMode) {
-      NewGuestSP -= 4;
-      *(uint32_t*)NewGuestSP = Signal;
+    ContextBackup->Flags |= ArchHelpers::Context::ContextFlags::CONTEXT_FLAG_32BIT;
+
+    NewGuestSP -= sizeof(FEXCore::x86::_libc_fpstate);
+    NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86::_libc_fpstate));
+    uint64_t FPStateLocation = NewGuestSP;
+
+    NewGuestSP -= sizeof(FEXCore::x86::ucontext_t);
+    NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86::ucontext_t));
+    uint64_t UContextLocation = NewGuestSP;
+
+    NewGuestSP -= sizeof(FEXCore::x86::siginfo_t);
+    NewGuestSP = AlignDown(NewGuestSP, alignof(FEXCore::x86::siginfo_t));
+    uint64_t SigInfoLocation = NewGuestSP;
+
+    ContextBackup->FPStateLocation = FPStateLocation;
+    ContextBackup->UContextLocation = UContextLocation;
+    ContextBackup->SigInfoLocation = SigInfoLocation;
+
+    FEXCore::x86::ucontext_t *guest_uctx = reinterpret_cast<FEXCore::x86::ucontext_t*>(UContextLocation);
+    FEXCore::x86::siginfo_t *guest_siginfo = reinterpret_cast<FEXCore::x86::siginfo_t*>(SigInfoLocation);
+
+    // We have extended float information
+    guest_uctx->uc_flags = FEXCore::x86::UC_FP_XSTATE;
+
+    // Pointer to where the fpreg memory is
+    guest_uctx->uc_mcontext.fpregs = static_cast<uint32_t>(FPStateLocation);
+    FEXCore::x86::_libc_fpstate *fpstate = reinterpret_cast<FEXCore::x86::_libc_fpstate*>(FPStateLocation);
+
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_GS] = Frame->State.gs;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_FS] = Frame->State.fs;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_ES] = Frame->State.es;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_DS] = Frame->State.ds;
+    if (ContextBackup->FaultToTopAndGeneratedException) {
+      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_TRAPNO] = SynchronousFaultData.TrapNo;
+      guest_siginfo->si_code = SynchronousFaultData.si_code;
+      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_ERR] = SynchronousFaultData.err_code;
+    }
+    else {
+      guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_TRAPNO] = ConvertSignalToTrapNo(Signal, HostSigInfo);
+      guest_siginfo->si_code = HostSigInfo->si_code;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_ERR] = ConvertSignalToError(Signal, HostSigInfo);
+    }
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_EIP] = Frame->State.rip;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_CS] = Frame->State.cs;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_EFL] = 0;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_UESP] = 0;
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_SS] = Frame->State.ss;
+
+#define COPY_REG(x) \
+    guest_uctx->uc_mcontext.gregs[FEXCore::x86::FEX_REG_##x] = Frame->State.gregs[X86State::REG_##x];
+    COPY_REG(RDI);
+    COPY_REG(RSI);
+    COPY_REG(RBP);
+    COPY_REG(RBX);
+    COPY_REG(RDX);
+    COPY_REG(RAX);
+    COPY_REG(RCX);
+    COPY_REG(RSP);
+#undef COPY_REG
+
+    // Copy float registers
+    for (size_t i = 0; i < 8; ++i) {
+      // 32-bit st register size is only 10 bytes. Not padded to 16byte like x86-64
+      memcpy(&fpstate->_st[i], &Frame->State.mm[i], 10);
     }
 
+    // Extended XMM state
+    fpstate->status = FEXCore::x86::fpstate_magic::MAGIC_XFPSTATE;
+    memcpy(fpstate->_xmm, Frame->State.xmm, sizeof(Frame->State.xmm));
+
+    // FCW store default
+    fpstate->fcw = Frame->State.FCW;
+    fpstate->ftw = Frame->State.FTW;
+    // Reconstruct FSW
+    fpstate->fsw =
+      (Frame->State.flags[FEXCore::X86State::X87FLAG_TOP_LOC] << 11) |
+      (Frame->State.flags[FEXCore::X86State::X87FLAG_C0_LOC] << 8) |
+      (Frame->State.flags[FEXCore::X86State::X87FLAG_C1_LOC] << 9) |
+      (Frame->State.flags[FEXCore::X86State::X87FLAG_C2_LOC] << 10) |
+      (Frame->State.flags[FEXCore::X86State::X87FLAG_C3_LOC] << 14);
+
+    // Copy over signal stack information
+    guest_uctx->uc_stack.ss_flags = GuestStack->ss_flags;
+    guest_uctx->uc_stack.ss_sp = static_cast<uint32_t>(reinterpret_cast<uint64_t>(GuestStack->ss_sp));
+    guest_uctx->uc_stack.ss_size = GuestStack->ss_size;
+
+    // These three elements are in every siginfo
+    guest_siginfo->si_signo = HostSigInfo->si_signo;
+    guest_siginfo->si_errno = HostSigInfo->si_errno;
+
+    switch (Signal) {
+      case SIGSEGV:
+      case SIGBUS:
+        // Macro expansion to get the si_addr
+        // This is the address trying to be accessed, not the RIP
+        guest_siginfo->_sifields._sigfault.addr = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(HostSigInfo->si_addr));
+        break;
+      case SIGFPE:
+      case SIGILL:
+        // Macro expansion to get the si_addr
+        // Can't really give a real result here. Pull from the context for now
+        guest_siginfo->_sifields._sigfault.addr = Frame->State.rip;
+        break;
+      case SIGCHLD:
+        guest_siginfo->_sifields._sigchld.pid = HostSigInfo->si_pid;
+        guest_siginfo->_sifields._sigchld.uid = HostSigInfo->si_uid;
+        guest_siginfo->_sifields._sigchld.status = HostSigInfo->si_status;
+        guest_siginfo->_sifields._sigchld.utime = HostSigInfo->si_utime;
+        guest_siginfo->_sifields._sigchld.stime = HostSigInfo->si_stime;
+        break;
+      case SIGALRM:
+      case SIGVTALRM:
+        guest_siginfo->_sifields._timer.tid = HostSigInfo->si_timerid;
+        guest_siginfo->_sifields._timer.overrun = HostSigInfo->si_overrun;
+        guest_siginfo->_sifields._timer.sigval.sival_int = HostSigInfo->si_int;
+        break;
+      default:
+        LogMan::Msg::EFmt("Unhandled siginfo_t for signal: {}\n", Signal);
+        break;
+    }
+  }
+
+  GuestSAMask NewMask { 0 };
+  if (GuestAction->sa_flags & SA_SIGINFO) {
+    Frame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.sigaction);
+    NewMask = GuestAction->sa_mask;
+  }
+  else {
     Frame->State.rip = reinterpret_cast<uint64_t>(GuestAction->sigaction_handler.handler);
   }
 
+  // SIG0 does not exist, or is part of this bitfield
+  NewMask.Val |= 1 << (Signal - 1);
+
+  // Tell signal delegator about this
+  memcpy(&(((ucontext_t*)ucontext)->uc_sigmask), &NewMask, sizeof(NewMask));
+  Frame->Thread->CTX->SignalDelegation->GuestSigNotifyMask(&(((ucontext_t*)ucontext)->uc_sigmask));
+  
+
+  while ((NewGuestSP & 15) != 8) {
+    NewGuestSP--;
+  }
+
+  // the return depends on this
+  NewGuestSP -= 8;
+  *(uint64_t*)NewGuestSP = (uint64_t)ContextBackup;
+  
   if (Is64BitMode) {
-    Frame->State.gregs[FEXCore::X86State::REG_RDI] = Signal;
+    Frame->State.gregs[X86State::REG_RDI] = ContextBackup->Signal;
+    Frame->State.gregs[X86State::REG_RSI] = ContextBackup->SigInfoLocation;
+    Frame->State.gregs[X86State::REG_RDX] = ContextBackup->UContextLocation;
 
     // Set up the new SP for stack handling
     NewGuestSP -= 8;
     *(uint64_t*)NewGuestSP = (uint64_t)GuestAction->restorer;
-    Frame->State.gregs[FEXCore::X86State::REG_RSP] = NewGuestSP;
+    Frame->State.gregs[X86State::REG_RSP] = NewGuestSP;
   }
   else {
     NewGuestSP -= 4;
+    *(uint32_t*)NewGuestSP = ContextBackup->UContextLocation;
+    NewGuestSP -= 4;
+    *(uint32_t*)NewGuestSP = ContextBackup->SigInfoLocation;
+    NewGuestSP -= 4;
+    *(uint32_t*)NewGuestSP = ContextBackup->Signal;
+
+    NewGuestSP -= 4;
     *(uint32_t*)NewGuestSP = 0; //FEX_TODO("fix this")
     //LOGMAN_THROW_A_FMT(?? < 0x1'0000'0000ULL, "This needs to be below 4GB");
-    Frame->State.gregs[FEXCore::X86State::REG_RSP] = NewGuestSP;
+    Frame->State.gregs[X86State::REG_RSP] = NewGuestSP;
   }
 
   // The guest starts its signal frame with a zero initialized FPU
@@ -628,6 +640,57 @@ bool Dispatcher::HandleGuestSignal(int Signal, void *info, void *ucontext, Guest
   Frame->State.FTW = 0xFFFF;
 
   return true;
+}
+
+// FEX_TODO("This is not abi correct wrt linux")
+static void doSigRet(FEXCore::Core::CpuStateFrame *Frame, uint64_t AbsoluteLoopTopAddressFillSRA) {
+  auto ContextBackup = *(ArchHelpers::Context::ContextBackup **)Frame->State.gregs[X86State::REG_RSP];
+
+  // modifies / replaces the previous stack frames
+  memcpy((void*)(Frame->ReturningStackLocation - ContextBackup->HostStackSize), (void*)ContextBackup->HostStackStart, ContextBackup->HostStackSize);
+
+  ucontext_t ucontext;
+  _libc_fpstate fp; // FEX_TODO("This is variable sized")
+  
+  // since we don't fully set it
+  memset(&ucontext, 0, sizeof(ucontext));
+
+  // Setup ucontext for restore
+  ucontext.uc_mcontext.fpregs = &fp;
+
+  doRestoreThreadState(Frame, &ucontext, ContextBackup, AbsoluteLoopTopAddressFillSRA);
+
+  //ucontext.uc_flags = ?; //FEX_TODO // UC_FP_XSTATE (kernel doesn't check it?), UC_SIGCONTEXT_SS (errors but ingored), UC_STRICT_RESTORE_SS (ignored cus no SC_SS)
+  ucontext.uc_link = nullptr;
+  //ucontext.uc_stack = ?; //FEX_TODO
+  //ucontext.uc_mcontext // restored by RestoreThreadState
+  //ucontext.uc_sigmask  // restored by RestoreThreadState
+  
+  
+  __asm__ volatile
+  (
+    "mov $15, %%rax\n"
+    "mov %0, %%rsp\n"
+    "syscall \n"
+    :
+    : "r"(&ucontext)
+  );
+}
+
+// FEX_TODO("This is not abi correct wrt linux")
+void Dispatcher::SigRet(FEXCore::Core::CpuStateFrame *Frame) {
+  auto ContextBackup = *(ArchHelpers::Context::ContextBackup **)Frame->State.gregs[X86State::REG_RSP];
+  auto NewHostStack = Frame->ReturningStackLocation - ContextBackup->HostStackSize;
+
+  __asm__ volatile
+  (
+    "mov %0, %%rsp \n"
+    "mov %1, %%rdi \n" 
+    "mov %2, %%rsi \n"
+    "call %P3"
+    :
+    : "r"(NewHostStack), "r"(Frame), "r"(AbsoluteLoopTopAddressFillSRA), "i"(doSigRet)
+  );
 }
 
 bool Dispatcher::HandleSIGILL(int Signal, void *info, void *ucontext) {

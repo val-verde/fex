@@ -117,6 +117,8 @@ class LLVMCore;
      */
     virtual void ClearRelocations() {}
 
+    virtual void SigRet(FEXCore::Core::CpuStateFrame *Frame) = 0;
+
     using AsmDispatch = FEX_NAKED void(*)(FEXCore::Core::CpuStateFrame *Frame);
     using JITCallback = FEX_NAKED void(*)(FEXCore::Core::CpuStateFrame *Frame, uint64_t RIP);
 

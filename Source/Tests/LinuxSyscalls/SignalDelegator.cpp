@@ -459,6 +459,25 @@ namespace FEX::HLE {
     }
   }
 
+  uint64_t SignalDelegator::GuestSigNotifyMask(void *pset) {
+    auto set = *(uint64_t*)pset;
+    uint64_t IgnoredSignalsMask = ~((1ULL << (SIGKILL - 1)) | (1ULL << (SIGSTOP - 1)));
+    ThreadData.CurrentSignalMask.Val = set & IgnoredSignalsMask;
+
+    uint64_t HostMask = ThreadData.CurrentSignalMask.Val;
+    // Now actually set the host mask
+    // This will hide from the guest that we are not actually setting all of the masks it wants
+    for (size_t i = 0; i < MAX_SIGNALS; ++i) {
+      if (HostHandlers[i + 1].Required.load(std::memory_order_relaxed)) {
+        // If it is a required host signal then we can't mask it
+        HostMask &= ~(1ULL << i);
+      }
+    }
+
+    *(uint64_t*)pset = HostMask;
+    return HostMask;
+  }
+
   uint64_t SignalDelegator::GuestSigProcMask(int how, const uint64_t *set, uint64_t *oldset) {
     // The order in which we handle signal mask setting is important here
     // old and new can point to the same location in memory.

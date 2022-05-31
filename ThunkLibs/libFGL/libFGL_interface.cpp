@@ -13,11 +13,15 @@ struct fex_gen_config {};
 // : fexgen::generate_guest_symtable { };
 
 // internal
+template<> struct fex_gen_config<fgl_AddGuestX11>: fexgen::custom_host_impl, fexgen::no_guest_export {};
+template<> struct fex_gen_config<fgl_RemoveGuestX11>: fexgen::custom_host_impl, fexgen::no_guest_export {};
 template<> struct fex_gen_config<fgl_HostToGuestX11>: fexgen::custom_host_impl, fexgen::no_guest_export {};
 template<> struct fex_gen_config<fgl_GuestToHostX11>: fexgen::custom_host_impl, fexgen::no_guest_export {};
 template<> struct fex_gen_config<fgl_XFree>: fexgen::custom_host_impl, fexgen::no_guest_export {};
 template<> struct fex_gen_config<fgl_FlushFromGuestX11>: fexgen::custom_host_impl, fexgen::no_guest_export {};
 
+template<> struct fex_gen_config<fgl_AddXGuestEGL>: fexgen::custom_host_impl, fexgen::no_guest_export {};
+template<> struct fex_gen_config<fgl_RemoveXGuestEGL>: fexgen::custom_host_impl, fexgen::no_guest_export {};
 template<> struct fex_gen_config<fgl_HostToXGuestEGL>: fexgen::custom_host_impl, fexgen::no_guest_export {};
 template<> struct fex_gen_config<fgl_XGuestToXHostEGL>: fexgen::custom_host_impl, fexgen::no_guest_export {};
 template<> struct fex_gen_config<fgl_FlushFromHostEGL>: fexgen::custom_host_impl, fexgen::no_guest_export {};
